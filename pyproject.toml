@@ -69,6 +69,8 @@ warn_unused_ignores = true
 warn_redundant_casts = true
 no_implicit_optional = true
 check_untyped_defs = true
+# Alembic migration scripts are dynamically typed (op/context) — don't type-check them.
+exclude = ["src/db/migrations/"]
 
 [[tool.mypy.overrides]]
 module = ["src.features.*", "src.db.*"]
