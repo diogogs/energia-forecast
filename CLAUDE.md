@@ -111,7 +111,7 @@ Ver `.env.example` — ENTSOE_API_TOKEN, DATABASE_URL (pooled), DATABASE_URL_DIR
 
 ## Estado atual
 
-**Última atualização:** 2026-07-07 (fim do dia 1, Semana 1).
+**Última atualização:** 2026-07-07 (dia 2, Semana 1).
 
 **Repositório:** código em `C:\dev\energia-forecast` (fora do OneDrive, ADR-005). GitHub: https://github.com/diogogs/energia-forecast (público, CI verde).
 
@@ -127,9 +127,9 @@ Ver `.env.example` — ENTSOE_API_TOKEN, DATABASE_URL (pooled), DATABASE_URL_DIR
 - [x] **Neon criado** (projeto `energia-forecast`, AWS eu-central-1, PG18). Connection strings (pooled + direct) verificadas e guardadas em `.env` **local** (fora do repo).
 - [x] **Camada de BD** — `src/config.py` (pydantic-settings), `src/db/base.py` (DeclarativeBase + naming conventions), `src/db/models.py` (`raw.omie_price`), `src/db/engine.py` (psycopg3, pool_pre_ping).
 - [x] **Migração alembic 001 aplicada ao Neon** — 6 schemas (raw/clean/features/pred/ops/meta) + `raw.omie_price` (`first_seen_at` escrito só no INSERT). `alembic_version=0001`.
+- [x] **Repositório de upsert OMIE + backfill completo** (branch `feat/omie-upsert-backfill`, 3 commits, ainda sem push/merge). `src/db/repositories/omie.py` (`ON CONFLICT DO UPDATE`, `first_seen_at` nunca mutado, caller controla a transação); teste de integração (marker `integration`, skip sem BD) + serviço Postgres no CI (`alembic upgrade head`); `src/ingestion/omie_backfill.py` (idempotente, commit por dia). **Fetcher com fallback de versão** — o OMIE às vezes retira o `.1` e só publica `.2`/`.3` (casos reais 2025-11-27→.2, 2025-10-30→.3); tenta `.1..5`, guarda a versão real em `source_file`. **`raw.omie_price`: 84 238 linhas, 918 dias contíguos 2024-01-01→2026-07-06, PT==ES, todos os dias-DST corretos.** 19 testes verdes.
 
 ### A seguir (retomar aqui)
-- [ ] **Repositório de upsert OMIE + backfill 2024-01→** — `INSERT ... ON CONFLICT DO UPDATE` (nunca tocar `first_seen_at`); expandir cada `MarginalPrice` em 2 linhas (PT, ES); provar idempotência (correr 2×, `first_seen_at` inalterado).
 - [ ] **Módulo REN** (`src/ingestion/sources/ren.py`) — consumo + geração 15-min; tabelas raw + migração 002.
 - [ ] **Módulo Energy-Charts** — load/geração ES (features).
 - [ ] **Camadas clean + features**, baselines, backtesting (Semanas 3-4).
