@@ -109,11 +109,29 @@ energia-forecast/
 
 Ver `.env.example` — ENTSOE_API_TOKEN, DATABASE_URL (pooled), DATABASE_URL_DIRECT (alembic), DATABASE_URL_RO (serving), MLFLOW_TRACKING_URI/USERNAME/PASSWORD, API_BASE_URL.
 
-## Estado atual (atualizar à medida que avança)
+## Estado atual
 
-- [ ] Token ENTSO-E pedido (ação do autor — email a transparency@entsoe.eu, assunto "Restful API access"; aprovação ≤3 dias úteis)
-- [x] Spikes de verificação dia-1: OMIE 96-períodos (parser próprio, ADR-006), REN 15-min (cross-check), Previous Runs desde 2024-04 (matriz de treino começa 2024-04-01)
-- [x] Scaffold + tooling + CI
-- [ ] Esquema da BD (migração alembic 001)
-- [ ] Módulo OMIE + backfill 2024-01→
-- [ ] Ingestão diária a correr (critério W2: 3+ dias sem intervenção)
+**Última atualização:** 2026-07-07 (fim do dia 1, Semana 1).
+
+**Repositório:** código em `C:\dev\energia-forecast` (fora do OneDrive, ADR-005). GitHub: https://github.com/diogogs/energia-forecast (público, CI verde).
+
+**Como correr (Windows):** `uv` foi instalado via winget mas pode não estar no PATH numa shell nova — prefixar com:
+`$env:Path = "C:\Users\dgsil\AppData\Local\Microsoft\WinGet\Packages\astral-sh.uv_Microsoft.Winget.Source_8wekyb3d8bbwe;$env:Path"` (ou correr `uv python update-shell` uma vez). O Python de sistema é 3.10; usar sempre `uv run` (Python 3.12 gerido pelo uv). `python` não está no PATH — usar o launcher `py` ou `uv run python`.
+
+### Feito
+- [x] **Spikes de verificação dia-1** — OMIEData **corrompe** ficheiros 15-min (lê 96 quartos como 25 "horas") → parser próprio (ADR-006); REN Data Hub dá **consumo + geração a 15-min desde ~2019** sem token (ADR-007); Open-Meteo Previous Runs (`ecmwf_ifs025`) cobre Iberia com vento/radiação **desde 2024-04** → matriz de modelação começa **2024-04-01**.
+- [x] **Decisão de fontes (ADR-007):** REN (consumo/geração PT) + OMIE (preços PT/ES) + Energy-Charts (load/geração ES, features) — tudo **token-free**. ENTSO-E adiada (email enviado 2026-07-07, opcional, validação cruzada).
+- [x] **Scaffold + tooling + CI** — uv/Python 3.12, ruff, mypy (strict em `src/features` e `src/db`), pytest, pre-commit; CI GitHub Actions verde.
+- [x] **Charter + ADRs 001-007** escritos.
+- [x] **Parser OMIE** (`src/ingestion/sources/omie.py`) — resolução-aware (horário/15-min) e DST-correto (mapeamento UTC por passos); coluna PT/ES verificada empiricamente vs Energy-Charts. **15 testes verdes** com fixtures reais de todos os dias-DST (23/25h, 92/96/100q).
+- [x] **Neon criado** (projeto `energia-forecast`, AWS eu-central-1, PG18). Connection strings (pooled + direct) verificadas e guardadas em `.env` **local** (fora do repo).
+- [x] **Camada de BD** — `src/config.py` (pydantic-settings), `src/db/base.py` (DeclarativeBase + naming conventions), `src/db/models.py` (`raw.omie_price`), `src/db/engine.py` (psycopg3, pool_pre_ping).
+- [x] **Migração alembic 001 aplicada ao Neon** — 6 schemas (raw/clean/features/pred/ops/meta) + `raw.omie_price` (`first_seen_at` escrito só no INSERT). `alembic_version=0001`.
+
+### A seguir (retomar aqui)
+- [ ] **Repositório de upsert OMIE + backfill 2024-01→** — `INSERT ... ON CONFLICT DO UPDATE` (nunca tocar `first_seen_at`); expandir cada `MarginalPrice` em 2 linhas (PT, ES); provar idempotência (correr 2×, `first_seen_at` inalterado).
+- [ ] **Módulo REN** (`src/ingestion/sources/ren.py`) — consumo + geração 15-min; tabelas raw + migração 002.
+- [ ] **Módulo Energy-Charts** — load/geração ES (features).
+- [ ] **Camadas clean + features**, baselines, backtesting (Semanas 3-4).
+- [ ] **Ingestão diária automática** (critério de saída W2: 3+ dias sem intervenção).
+- [ ] Token ENTSO-E: aguardar aprovação (~3 dias úteis) — depois gerar em My Account Settings e adicionar a `.env`/Secrets (opcional, validação cruzada).
