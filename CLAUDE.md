@@ -31,10 +31,11 @@ Projeto pessoal de portfólio para demonstrar **ML engineering end-to-end**: sis
 
 | Fonte | Dados | Acesso | Notas |
 |---|---|---|---|
-| ENTSO-E Transparency | Consumo horário, geração por tecnologia, preços day-ahead (PT, ES) | Token (pedido por email, ≤3 dias úteis) | Principal. `entsoe-py>=0.8.0`, zonas `PT`/`ES`, tz-aware. 400 req/min; chunks ≤90 dias. |
+| REN Data Hub | Consumo PT + geração por tecnologia, 15-min, desde ~2019 | API JSON pública, sem chave | **Principal (PT):** target de consumo + geração. `servicebus.ren.pt/datahubapi`, endpoint por dia (96 slots). ADR-007. |
+| OMIE | Preços day-ahead oficiais PT e ES | Ficheiros públicos, sem chave | **Principal (preço):** parser próprio (ADR-006 — a lib OMIEData corrompe ficheiros 15-min). ADR-007. |
 | Open-Meteo | Previsões meteo horárias (vento 100m, radiação, temperatura) + arquivo de previsões passadas | Sem chave; CC-BY | Substitui o IPMA (ADR-001). Previous Runs p/ treino; Forecast API p/ produção; modelo pinado. |
-| OMIE | Preços day-ahead oficiais PT/ES | Ficheiros públicos | Parser próprio (ADR-006 — a lib OMIEData corrompe ficheiros 15-min). Fonte token-free do target de preço. |
-| REN Data Hub | Séries nacionais 15-min (consumo, mix) | API JSON pública | Cross-check apenas — a definição de "consumo" difere da carga ENTSO-E; nunca misturar fontes num target. |
+| Energy-Charts (Fraunhofer ISE) | Load + geração de ES (features) | API pública, sem chave; CC-BY 4.0 | ES como feature (a REN é só PT). `api.energy-charts.info` — `/public_power`, `/price`. ADR-007. |
+| ENTSO-E Transparency | Fonte canónica pan-europeia | Token via email (≤3 dias) | **Adiada / opcional:** validação cruzada futura, fora do caminho crítico (ADR-007). |
 
 **Regras de ingestão:** idempotente (upsert por chave natural; `first_seen_at` escrito só no INSERT e nunca tocado — é o proxy de publicação); validação à entrada → `ops.dq_log`, nunca descartes silenciosos; camadas `raw` (resolução nativa, nunca mutada) → `clean` (grelha horária) → `features`; janela deslizante [now−3d, now] re-ingerida todas as manhãs (self-healing), incluindo preços.
 

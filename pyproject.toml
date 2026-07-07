@@ -57,6 +57,9 @@ select = [
 [tool.ruff.lint.per-file-ignores]
 "notebooks/*" = ["E402"]
 
+[tool.ruff.lint.isort]
+known-first-party = ["src"]
+
 # ---------------------------------------------------------------------------
 # Mypy — gradual: strict where correctness is load-bearing (features, db)
 # ---------------------------------------------------------------------------
