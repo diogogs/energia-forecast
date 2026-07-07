@@ -21,7 +21,7 @@ import httpx
 
 from src.db.engine import make_engine, make_session_factory
 from src.db.repositories.omie import upsert_omie_prices
-from src.ingestion.sources.omie import get_prices
+from src.ingestion.sources.omie import fetch_marginalpdbc, parse_marginalpdbc
 
 logger = logging.getLogger("omie_backfill")
 
@@ -50,17 +50,18 @@ def backfill_omie(
     try:
         day = start
         while day <= end:
-            prices = get_prices(day, client)
-            if prices:
+            file = fetch_marginalpdbc(day, client)
+            if file is not None:
+                prices = parse_marginalpdbc(file.text)
                 with factory() as session:
-                    written = upsert_omie_prices(session, prices, f"marginalpdbc_{day:%Y%m%d}.1")
+                    written = upsert_omie_prices(session, prices, file.filename)
                     session.commit()
                 stats["days_ingested"] += 1
                 stats["rows"] += written
-                logger.info("%s: upserted %d rows (%d periods)", day, written, written // 2)
+                logger.info("%s: upserted %d rows from %s", day, written, file.filename)
             else:
                 stats["days_missing"] += 1
-                logger.warning("%s: no file published", day)
+                logger.warning("%s: no file published (all versions absent)", day)
             day += dt.timedelta(days=1)
             if polite_delay_s:
                 time.sleep(polite_delay_s)
