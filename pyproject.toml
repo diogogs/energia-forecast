@@ -1,0 +1,87 @@
+[project]
+name = "energia-forecast"
+version = "0.1.0"
+description = "Live day-ahead forecasting of Portuguese electricity demand and MIBEL prices — a zero-cost, always-on ML system"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "alembic>=1.18.5",
+    "entsoe-py>=0.8.0",
+    "fastapi>=0.139.0",
+    "holidays>=0.100",
+    "httpx>=0.28.1",
+    "lightgbm>=4.6.0",
+    "mlflow>=3.14.0",
+    "pandas>=2.3.3",
+    "psycopg[binary]>=3.3.4",
+    "pydantic>=2.13.4",
+    "pydantic-settings>=2.14.2",
+    "python-dotenv>=1.2.2",
+    "scikit-learn>=1.9.0",
+    "sqlalchemy>=2.0.51",
+    "tenacity>=9.1.4",
+    "uvicorn>=0.50.2",
+]
+
+[dependency-groups]
+dev = [
+    "mypy>=2.1.0",
+    "pandas-stubs>=3.0.3.260530",
+    "pre-commit>=4.6.0",
+    "pytest>=9.1.1",
+    "pytest-cov>=7.1.0",
+    "ruff>=0.15.20",
+]
+
+# ---------------------------------------------------------------------------
+# Ruff — lint + format
+# ---------------------------------------------------------------------------
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "B",   # flake8-bugbear
+    "UP",  # pyupgrade
+    "N",   # pep8-naming
+    "DTZ", # flake8-datetimez — naive datetimes are bugs in this project
+    "RUF", # ruff-specific
+]
+
+[tool.ruff.lint.per-file-ignores]
+"notebooks/*" = ["E402"]
+
+# ---------------------------------------------------------------------------
+# Mypy — gradual: strict where correctness is load-bearing (features, db)
+# ---------------------------------------------------------------------------
+[tool.mypy]
+python_version = "3.12"
+warn_unused_ignores = true
+warn_redundant_casts = true
+no_implicit_optional = true
+check_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = ["src.features.*", "src.db.*"]
+strict = true
+
+[[tool.mypy.overrides]]
+module = ["entsoe.*", "lightgbm.*", "mlflow.*", "holidays.*"]
+ignore_missing_imports = true
+
+# ---------------------------------------------------------------------------
+# Pytest
+# ---------------------------------------------------------------------------
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q --strict-markers"
+markers = [
+    "leakage: anti-leakage tests (non-negotiable, always run in CI)",
+    "integration: tests requiring a live Postgres (CI service container)",
+]

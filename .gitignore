@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Environment / secrets — never commit
+.env
+
+# MLflow local scratch (tracking lives on DagsHub)
+mlruns/
+
+# Model artifacts (served from GitHub Releases, not the working tree)
+models_artifacts/
+
+# Data scratch
+*.parquet
+*.csv
+!tests/fixtures/**/*.csv
+
+# Notebooks: keep outputs out of diffs (enforced by pre-commit strip in future if needed)
+.ipynb_checkpoints/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
