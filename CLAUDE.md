@@ -140,10 +140,13 @@ Ver `.env.example` — ENTSOE_API_TOKEN, DATABASE_URL (pooled), DATABASE_URL_DIR
 
 - [x] **`build_features` (consumo Fase 1) + baselines + primeiros números** (via AsOfRepo, sem queries diretas). `src/features/build_features.py`: calendário em **hora de Lisboa** (`holidays` PT — o offset PT/CET faz a 1ª hora do Ano Novo CET cair ainda em 31-dez Lisboa, tratado corretamente), lags legais {48,72,168,336h} relativos ao target, rolling recente ≤ fim D−1. `src/features/target.py`: label = consumo realizado no dia CET. `src/models/baselines.py`: persistência −48h e sazonal −168h (colunas de lag, mesmo pipeline). **Avaliação em 31 folds (2024-05→2025-03): persistência MAE 522 MW / MAPE 9.16%; sazonal-semanal MAE 297 / MAPE 4.83%.** A sazonal é a baseline a bater. 91 testes verdes.
 
+- [x] **Meteo como feature** (`AsOfRepo.weather_forecast`) — seleção do lead legal mais fresco (lead 1 = run de D, legal às 07:00) + média sobre localizações; transforms HDD/CDD (bases 18/21°C), vento³ capped (~12 m/s), radiação. Meteo em falta → NaN (LightGBM tolera). 95 testes.
+- [x] **1º modelo LightGBM + backtesting rolling-origin + gate PASSA** 🎯 (`src/models/backtest.py`). `PreloadedRepo` (as-of in-memory, legalmente idêntico ao AsOfRepo — provado em teste), `build_matrix` (812 folds), `rolling_origin_backtest` (refresh semanal, janela expansiva, 10 semanas OOS). LightGBM `regression_l1`. **Resultado (71 folds OOS, D+1 consumo): LightGBM MAE 166 MW / MAPE 2.77% vs sazonal 354/5.95% vs persistência 664/11.46% → ACEITE** (bate ambas, ~metade do erro da sazonal). Determinístico (`random_state=42`). 98 testes verdes.
+
 ### A seguir (retomar aqui)
-- [ ] **Meteo como feature** — `AsOfRepo.weather_forecast` (lead legal selecionado) + transforms (HDD/CDD, vento³ capped, radiação) no `build_features`.
-- [ ] **1º modelo LightGBM** (`regression_l1`, hora como feature) + **backtesting rolling-origin** + gate like-for-like (nenhum modelo aceite sem bater ambas as baselines nos mesmos folds). Tabelas `pred.predictions` / `pred.backtest_predictions`.
+- [ ] **Persistir previsões** — tabelas `pred.predictions` (insert-only, `issued_at`) + `pred.backtest_predictions` (fold-wise); escrever baselines + modelo como modelos de 1ª classe. MLflow (DagsHub) para tracking; artefactos em GitHub Releases (nunca MLflow no serving).
 - [ ] **Ingestão diária automática** (GitHub Actions crons) — critério de saída W2: 3+ dias sem intervenção.
+- [ ] **Fase 2 (preço)** — reutilizar a fundação; features extra (previsão de consumo as-issued, lags de preço, ES, proxy renováveis), tripleto quantílico P10/P50/P90.
 - [ ] **Camadas clean + features**, baselines, backtesting (Semanas 3-4).
 - [ ] **Ingestão diária automática** (critério de saída W2: 3+ dias sem intervenção).
 - [ ] Token ENTSO-E: aguardar aprovação (~3 dias úteis) — depois gerar em My Account Settings e adicionar a `.env`/Secrets (opcional, validação cruzada).

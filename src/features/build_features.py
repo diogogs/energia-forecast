@@ -10,12 +10,24 @@ features follow **Lisbon** civil time, the physical driver of PT demand.
 from __future__ import annotations
 
 import datetime as dt
+from typing import Protocol
 
 import holidays
 import pandas as pd
 
 from src.features import temporal
-from src.features.asof_repo import AsOfRepo
+
+
+class FeatureRepo(Protocol):
+    """The as-of read surface build_features depends on (satisfied by AsOfRepo and the
+    preloaded backtest repo alike)."""
+
+    def hourly_consumption(self, t_issue: dt.datetime) -> pd.Series[float]: ...
+
+    def weather_forecast(
+        self, t_issue: dt.datetime, target_hours: list[dt.datetime]
+    ) -> pd.DataFrame: ...
+
 
 # Legal consumption lags relative to the target hour (hours). 24h is deliberately excluded.
 CONSUMPTION_LAGS_H = (48, 72, 168, 336)
@@ -49,7 +61,7 @@ def _add_weather_features(features: pd.DataFrame, weather: pd.DataFrame) -> pd.D
     return features.join(derived)
 
 
-def build_consumption_features(repo: AsOfRepo, issue_date: dt.date) -> pd.DataFrame:
+def build_consumption_features(repo: FeatureRepo, issue_date: dt.date) -> pd.DataFrame:
     """Feature matrix (index = delivery-hour ts_utc) for the consumption forecast issued on D."""
     t_issue = temporal.t_issue_for(issue_date)
     delivery_hours = temporal.delivery_hours_utc(temporal.delivery_date_for(issue_date))
