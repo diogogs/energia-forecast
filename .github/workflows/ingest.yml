@@ -1,0 +1,32 @@
+name: Daily ingest
+
+on:
+  schedule:
+    # 06:30 UTC daily — after the ECMWF 00Z run is disseminated and before the 07:00 t_issue,
+    # so the self-healing window captures the freshest legal data for that day's forecast.
+    - cron: "30 6 * * *"
+  workflow_dispatch: {}
+
+# Never run two ingests at once (they upsert the same rows); let the running one finish.
+concurrency:
+  group: daily-ingest
+  cancel-in-progress: false
+
+jobs:
+  ingest:
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      - name: Self-healing ingest [today-3d, today]
+        run: uv run python -m src.ingestion.daily
