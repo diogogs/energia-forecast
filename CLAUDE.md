@@ -145,10 +145,12 @@ Ver `.env.example` — ENTSOE_API_TOKEN, DATABASE_URL (pooled), DATABASE_URL_DIR
 
 - [x] **Ingestão diária automática — o sistema auto-alimenta-se** ✅ (critério de saída W2). `src/ingestion/daily.py`: re-ingere a janela deslizante `[hoje−3d, hoje]` nas 4 fontes (idempotente → cura gaps + revisões tardias, sem duplicar), isolamento por fonte, `exit 1` se alguma falhar. `.github/workflows/ingest.yml`: cron **06:30 UTC** (após o run 00Z do ECMWF, antes do t_issue 07:00) + `workflow_dispatch`, guard de concorrência, `DATABASE_URL` via GitHub Secret. **Validado ao vivo no runner do GitHub** (dispatch manual): 4 fontes OK. Secret `DATABASE_URL` configurado (pooled). Falta: observar 3+ dias sem intervenção.
 
+- [x] **Previsões persistidas + predict diário** ✅. Migração 0006: `pred.predictions` (insert-only, PK inclui `quantile`; `issued_at` nunca mutado) + `pred.backtest_predictions` (fold-wise, reescrevível). `src/models/predict.py`: retrain-on-emit (treino ~seg), emite consumo D+1 (LightGBM + 2 baselines, modelos de 1ª classe) → `pred.predictions` via `ON CONFLICT DO NOTHING`. `src/db/repositories/predictions.py`. **Validado ao vivo**: 72 linhas escritas, idempotência insert-only provada (re-emissão mantém a 1ª). Backtest persistido em `pred.backtest_predictions` (5112 linhas; MAE realizado na BD = 165/354/664, confere). `.github/workflows/predict.yml`: cron **07:05 UTC**. `make_consumption_model` partilhado backtest↔serving (sem skew). 100 testes verdes.
+
 ### A seguir (retomar aqui)
-- [ ] **Persistir previsões** — tabelas `pred.predictions` (insert-only, `issued_at`) + `pred.backtest_predictions` (fold-wise); escrever baselines + modelo como modelos de 1ª classe. MLflow (DagsHub) para tracking; artefactos em GitHub Releases (nunca MLflow no serving). Depois: cron `predict` diário (07:00 UTC) que emite a previsão D+1.
-- [ ] **Fase 2 (preço)** — reutilizar a fundação; features extra (previsão de consumo as-issued, lags de preço, ES, proxy renováveis), tripleto quantílico P10/P50/P90.
-- [ ] **Dashboard Streamlit + API FastAPI** + monitorização (erro realizado, drift, watchdog de frescura).
+- [ ] **MLflow (DagsHub)** — tracking de experiências (params, métricas do backtest, feature importance). Nunca no caminho de serving.
+- [ ] **Fase 2 (preço)** — reutilizar a fundação; features extra (previsão de consumo as-issued, lags de preço, ES, proxy renováveis), tripleto quantílico P10/P50/P90 (pinball loss + cobertura).
+- [ ] **Dashboard Streamlit + API FastAPI** (lê `pred.*`) + monitorização (erro realizado, drift, watchdog de frescura).
 - [ ] **Camadas clean + features**, baselines, backtesting (Semanas 3-4).
 - [ ] **Ingestão diária automática** (critério de saída W2: 3+ dias sem intervenção).
 - [ ] Token ENTSO-E: aguardar aprovação (~3 dias úteis) — depois gerar em My Account Settings e adicionar a `.env`/Secrets (opcional, validação cruzada).

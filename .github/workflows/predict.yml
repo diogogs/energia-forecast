@@ -1,0 +1,31 @@
+name: Daily predict
+
+on:
+  schedule:
+    # 07:05 UTC — just after t_issue (07:00) and the 06:30 ingest, so the forecast is on-time
+    # and built on the freshest legal data.
+    - cron: "5 7 * * *"
+  workflow_dispatch: {}
+
+concurrency:
+  group: daily-predict
+  cancel-in-progress: false
+
+jobs:
+  predict:
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      - name: Emit D+1 consumption forecast
+        run: uv run python -m src.models.predict

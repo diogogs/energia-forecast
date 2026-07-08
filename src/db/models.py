@@ -147,3 +147,51 @@ class OpenMeteoForecast(Base):
     last_seen_at: Mapped[dt.datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
+
+
+class Prediction(Base):
+    """pred.predictions — live forecasts, INSERT-ONLY. issued_at is never mutated (temporal rigor).
+
+    One row per (issue_date, target hour, model, quantile). Baselines are first-class models
+    alongside the ML model. quantile is 'point' for Phase-1 consumption, 'p10'/'p50'/'p90' for
+    Phase-2 price. Late emissions carry ``late_issue`` and sit outside headline scoring.
+    """
+
+    __tablename__ = "predictions"
+    __table_args__ = {"schema": "pred"}  # noqa: RUF012 — SQLAlchemy config, not a mutable default
+
+    issue_date: Mapped[dt.date] = mapped_column(Date, primary_key=True)
+    target_ts: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), primary_key=True)
+    model_name: Mapped[str] = mapped_column(String(32), primary_key=True)
+    quantile: Mapped[str] = mapped_column(
+        String(8), primary_key=True, server_default=text("'point'")
+    )
+
+    target_name: Mapped[str] = mapped_column(String(16), nullable=False)  # 'consumption' | 'price'
+    y_hat: Mapped[float] = mapped_column(Float, nullable=False)
+    issued_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    late_issue: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
+
+
+class BacktestPrediction(Base):
+    """pred.backtest_predictions — fold-wise rolling-origin predictions + realised truth.
+
+    The ONLY source for "simulated history" charts (no chart ever calls model.predict on past
+    dates). Rewritten per backtest run, so not insert-only.
+    """
+
+    __tablename__ = "backtest_predictions"
+    __table_args__ = {"schema": "pred"}  # noqa: RUF012 — SQLAlchemy config, not a mutable default
+
+    issue_date: Mapped[dt.date] = mapped_column(Date, primary_key=True)
+    target_ts: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), primary_key=True)
+    model_name: Mapped[str] = mapped_column(String(32), primary_key=True)
+
+    target_name: Mapped[str] = mapped_column(String(16), nullable=False)
+    y_hat: Mapped[float] = mapped_column(Float, nullable=False)
+    y_true: Mapped[float | None] = mapped_column(Float, nullable=True)
+    created_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )

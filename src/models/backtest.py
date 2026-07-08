@@ -43,6 +43,26 @@ FEATURE_COLS = [
     "radiation",
 ]
 
+# First fold: 2024-04-15 gives 14 days of lag history over the Open-Meteo window (from 2024-04).
+FIRST_ISSUE = dt.date(2024, 4, 15)
+
+
+def make_consumption_model() -> LGBMRegressor:
+    """The pinned Phase-1 model config, shared by backtest and live prediction (no skew)."""
+    return LGBMRegressor(
+        objective="regression_l1",
+        n_estimators=500,
+        learning_rate=0.05,
+        num_leaves=63,
+        min_child_samples=50,
+        subsample=0.8,
+        subsample_freq=1,
+        colsample_bytree=0.8,
+        random_state=42,
+        n_jobs=1,
+        verbosity=-1,
+    )
+
 
 class PreloadedRepo:
     """In-memory as-of repo: same legality as AsOfRepo, but data loaded once (fast backtests)."""
@@ -105,6 +125,39 @@ def build_matrix(repo: PreloadedRepo, issue_dates: list[dt.date]) -> pd.DataFram
     return pd.concat(frames)
 
 
+# Which prediction column each model contributes to pred.backtest_predictions.
+_BACKTEST_MODEL_COLS = {
+    "lightgbm": "y_hat",
+    "persistence_48h": "cons_lag_48h",
+    "seasonal_168h": "cons_lag_168h",
+}
+
+
+def to_backtest_rows(
+    preds: pd.DataFrame, target_name: str = "consumption"
+) -> list[dict[str, object]]:
+    """Reshape backtest predictions (all models) into pred.backtest_predictions rows."""
+    records = preds.rename_axis("target_ts").reset_index().to_dict("records")
+    rows: list[dict[str, object]] = []
+    for model_name, col in _BACKTEST_MODEL_COLS.items():
+        for rec in records:
+            y_hat = rec[col]
+            if pd.isna(y_hat):
+                continue
+            y_true = rec["y"]
+            rows.append(
+                {
+                    "issue_date": rec["issue_date"],
+                    "target_ts": rec["target_ts"].to_pydatetime(),
+                    "model_name": model_name,
+                    "target_name": target_name,
+                    "y_hat": float(y_hat),
+                    "y_true": None if pd.isna(y_true) else float(y_true),
+                }
+            )
+    return rows
+
+
 def _mae(actual: pd.Series, predicted: pd.Series) -> float:
     return float((actual - predicted).abs().mean())
 
@@ -128,19 +181,7 @@ def rolling_origin_backtest(
         train = matrix[matrix["issue_date"] < week_start]
         test = matrix[(matrix["issue_date"] >= week_start) & (matrix["issue_date"] < week_end)]
         if not test.empty and len(train) > 500:
-            model = LGBMRegressor(
-                objective="regression_l1",
-                n_estimators=500,
-                learning_rate=0.05,
-                num_leaves=63,
-                min_child_samples=50,
-                subsample=0.8,
-                subsample_freq=1,
-                colsample_bytree=0.8,
-                random_state=42,
-                n_jobs=1,
-                verbosity=-1,
-            )
+            model = make_consumption_model()
             model.fit(train[FEATURE_COLS].astype("float64"), train["y"])
             test = test.assign(y_hat=model.predict(test[FEATURE_COLS].astype("float64")))
             predictions.append(test)
