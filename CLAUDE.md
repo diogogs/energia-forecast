@@ -143,10 +143,12 @@ Ver `.env.example` — ENTSOE_API_TOKEN, DATABASE_URL (pooled), DATABASE_URL_DIR
 - [x] **Meteo como feature** (`AsOfRepo.weather_forecast`) — seleção do lead legal mais fresco (lead 1 = run de D, legal às 07:00) + média sobre localizações; transforms HDD/CDD (bases 18/21°C), vento³ capped (~12 m/s), radiação. Meteo em falta → NaN (LightGBM tolera). 95 testes.
 - [x] **1º modelo LightGBM + backtesting rolling-origin + gate PASSA** 🎯 (`src/models/backtest.py`). `PreloadedRepo` (as-of in-memory, legalmente idêntico ao AsOfRepo — provado em teste), `build_matrix` (812 folds), `rolling_origin_backtest` (refresh semanal, janela expansiva, 10 semanas OOS). LightGBM `regression_l1`. **Resultado (71 folds OOS, D+1 consumo): LightGBM MAE 166 MW / MAPE 2.77% vs sazonal 354/5.95% vs persistência 664/11.46% → ACEITE** (bate ambas, ~metade do erro da sazonal). Determinístico (`random_state=42`). 98 testes verdes.
 
+- [x] **Ingestão diária automática — o sistema auto-alimenta-se** ✅ (critério de saída W2). `src/ingestion/daily.py`: re-ingere a janela deslizante `[hoje−3d, hoje]` nas 4 fontes (idempotente → cura gaps + revisões tardias, sem duplicar), isolamento por fonte, `exit 1` se alguma falhar. `.github/workflows/ingest.yml`: cron **06:30 UTC** (após o run 00Z do ECMWF, antes do t_issue 07:00) + `workflow_dispatch`, guard de concorrência, `DATABASE_URL` via GitHub Secret. **Validado ao vivo no runner do GitHub** (dispatch manual): 4 fontes OK. Secret `DATABASE_URL` configurado (pooled). Falta: observar 3+ dias sem intervenção.
+
 ### A seguir (retomar aqui)
-- [ ] **Persistir previsões** — tabelas `pred.predictions` (insert-only, `issued_at`) + `pred.backtest_predictions` (fold-wise); escrever baselines + modelo como modelos de 1ª classe. MLflow (DagsHub) para tracking; artefactos em GitHub Releases (nunca MLflow no serving).
-- [ ] **Ingestão diária automática** (GitHub Actions crons) — critério de saída W2: 3+ dias sem intervenção.
+- [ ] **Persistir previsões** — tabelas `pred.predictions` (insert-only, `issued_at`) + `pred.backtest_predictions` (fold-wise); escrever baselines + modelo como modelos de 1ª classe. MLflow (DagsHub) para tracking; artefactos em GitHub Releases (nunca MLflow no serving). Depois: cron `predict` diário (07:00 UTC) que emite a previsão D+1.
 - [ ] **Fase 2 (preço)** — reutilizar a fundação; features extra (previsão de consumo as-issued, lags de preço, ES, proxy renováveis), tripleto quantílico P10/P50/P90.
+- [ ] **Dashboard Streamlit + API FastAPI** + monitorização (erro realizado, drift, watchdog de frescura).
 - [ ] **Camadas clean + features**, baselines, backtesting (Semanas 3-4).
 - [ ] **Ingestão diária automática** (critério de saída W2: 3+ dias sem intervenção).
 - [ ] Token ENTSO-E: aguardar aprovação (~3 dias úteis) — depois gerar em My Account Settings e adicionar a `.env`/Secrets (opcional, validação cruzada).
