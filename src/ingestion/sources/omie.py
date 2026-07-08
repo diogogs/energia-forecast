@@ -16,15 +16,22 @@ from dataclasses import dataclass
 from zoneinfo import ZoneInfo
 
 import httpx
-from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
+from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponential
 
 # OMIE market time is CET/CEST — the same civil time as Madrid.
 MARKET_TZ = ZoneInfo("Europe/Madrid")
 
 _DOWNLOAD_URL = (
-    "https://www.omie.es/en/file-download?parents%5B0%5D=marginalpdbc&filename=marginalpdbc_{ymd}.1"
+    "https://www.omie.es/en/file-download?parents%5B0%5D=marginalpdbc&filename={filename}"
 )
+_FILENAME = "marginalpdbc_{ymd}.{version}"
 _HEADER = "MARGINALPDBC"
+
+# OMIE names each day's file marginalpdbc_YYYYMMDD.V where V is the publication version.
+# .1 is the norm, but a re-issue can withdraw .1 (and .2) and publish only a higher V —
+# empirically seen up to .3 (e.g. 2025-10-30). We take the LOWEST version that exists, so
+# normal days still hit .1 in one request; we scan up to this cap before declaring a day absent.
+_MAX_VERSION = 5
 
 # Number of periods in a file -> market-day resolution in minutes.
 #   Hourly (pre-2025-10-01):      24 normal, 23 spring-forward, 25 fall-back.
@@ -34,6 +41,14 @@ _PERIODS_TO_RESOLUTION = {23: 60, 24: 60, 25: 60, 92: 15, 96: 15, 100: 15}
 
 class OmieParseError(ValueError):
     """The marginalpdbc payload is malformed or has an unexpected period count."""
+
+
+@dataclass(frozen=True, slots=True)
+class MarginalpdbcFile:
+    """A fetched marginalpdbc file plus the exact filename (incl. version) it came from."""
+
+    filename: str
+    text: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -106,32 +121,55 @@ def parse_marginalpdbc(text: str) -> list[MarginalPrice]:
     ]
 
 
+def _is_transient(exc: BaseException) -> bool:
+    """Network failures and transient server statuses (5xx, 429) are worth retrying."""
+    if isinstance(exc, httpx.TransportError):
+        return True
+    return isinstance(exc, httpx.HTTPStatusError) and (
+        exc.response.status_code >= 500 or exc.response.status_code == 429
+    )
+
+
 @retry(
     reraise=True,
     stop=stop_after_attempt(5),
     wait=wait_exponential(multiplier=1, min=1, max=30),
-    retry=retry_if_exception_type(httpx.TransportError),
+    retry=retry_if_exception(_is_transient),
 )
 def _get(client: httpx.Client, url: str) -> httpx.Response:
-    return client.get(url, timeout=40.0, follow_redirects=True)
+    response = client.get(url, timeout=40.0, follow_redirects=True)
+    # 404 is a legitimate signal (file/version not published) — returned, never raised/retried.
+    if response.status_code != 404:
+        response.raise_for_status()
+    return response
 
 
-def fetch_marginalpdbc(day: dt.date, client: httpx.Client | None = None) -> str | None:
-    """Download the marginalpdbc file for ``day``; return None if not yet published."""
+def fetch_marginalpdbc(day: dt.date, client: httpx.Client | None = None) -> MarginalpdbcFile | None:
+    """Download one market day's file, trying versions .1..N; None if none is published.
+
+    Deliberate: we take the LOWEST version that exists. The .1 file is the price published
+    at D-1 (the value the market actually saw — the publication-time proxy); observed OMIE
+    practice is to WITHDRAW the superseded file when re-issuing (2025-11-27 only .2,
+    2025-10-30 only .3), so a still-downloadable .1 is the canonical one.
+    """
     owns_client = client is None
     client = client or httpx.Client()
+    ymd = day.strftime("%Y%m%d")
     try:
-        response = _get(client, _DOWNLOAD_URL.format(ymd=day.strftime("%Y%m%d")))
-        if response.status_code == 404:
-            return None
-        response.raise_for_status()
-        return response.text if _HEADER in response.text else None
+        for version in range(1, _MAX_VERSION + 1):
+            filename = _FILENAME.format(ymd=ymd, version=version)
+            response = _get(client, _DOWNLOAD_URL.format(filename=filename))
+            if response.status_code == 404:
+                continue
+            if _HEADER in response.text:
+                return MarginalpdbcFile(filename=filename, text=response.text)
+        return None
     finally:
         if owns_client:
             client.close()
 
 
 def get_prices(day: dt.date, client: httpx.Client | None = None) -> list[MarginalPrice]:
-    """Fetch and parse one market day; empty list if the file isn't published yet."""
-    text = fetch_marginalpdbc(day, client)
-    return parse_marginalpdbc(text) if text is not None else []
+    """Fetch and parse one market day; empty list if no version is published yet."""
+    file = fetch_marginalpdbc(day, client)
+    return parse_marginalpdbc(file.text) if file is not None else []

@@ -9,8 +9,15 @@ __pycache__/
 .coverage
 htmlcov/
 
-# Environment / secrets — never commit
+# Environment / secrets — never commit (public repo: a leaked key is a real incident)
 .env
+.env.*
+!.env.example
+# Loose secret dumps (tokens/keys pasted into files) must never be committed
+*API_KEY*.txt
+*.token
+*.key
+*.pem
 
 # MLflow local scratch (tracking lives on DagsHub)
 mlruns/
@@ -31,3 +38,6 @@ models_artifacts/
 Thumbs.db
 .vscode/
 .idea/
+
+# Claude Code personal settings (per-user, never committed)
+.claude/settings.local.json

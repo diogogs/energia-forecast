@@ -31,7 +31,7 @@ Projeto pessoal de portfólio para demonstrar **ML engineering end-to-end**: sis
 
 | Fonte | Dados | Acesso | Notas |
 |---|---|---|---|
-| REN Data Hub | Consumo PT + geração por tecnologia, 15-min, desde ~2019 | API JSON pública, sem chave | **Principal (PT):** target de consumo + geração. `servicebus.ren.pt/datahubapi`, endpoint por dia (96 slots). ADR-007. |
+| REN Data Hub | Consumo PT + geração por tecnologia, 15-min, desde ~2019 | API JSON pública, sem chave | **Principal (PT):** target de consumo + geração. `POST datahub.ren.pt/service/Electricity/ProductionBreakdown/{id}?dayToSearchString={.NET ticks}` — um call dá `Consumption` (target) + todas as tecnologias. Hora **Lisboa** (WET/WEST), não CET. ADR-007, ADR-008. |
 | OMIE | Preços day-ahead oficiais PT e ES | Ficheiros públicos, sem chave | **Principal (preço):** parser próprio (ADR-006 — a lib OMIEData corrompe ficheiros 15-min). ADR-007. |
 | Open-Meteo | Previsões meteo horárias (vento 100m, radiação, temperatura) + arquivo de previsões passadas | Sem chave; CC-BY | Substitui o IPMA (ADR-001). Previous Runs p/ treino; Forecast API p/ produção; modelo pinado. |
 | Energy-Charts (Fraunhofer ISE) | Load + geração de ES (features) | API pública, sem chave; CC-BY 4.0 | ES como feature (a REN é só PT). `api.energy-charts.info` — `/public_power`, `/price`. ADR-007. |
@@ -111,7 +111,7 @@ Ver `.env.example` — ENTSOE_API_TOKEN, DATABASE_URL (pooled), DATABASE_URL_DIR
 
 ## Estado atual
 
-**Última atualização:** 2026-07-07 (fim do dia 1, Semana 1).
+**Última atualização:** 2026-07-08 (dia 2, Semana 1).
 
 **Repositório:** código em `C:\dev\energia-forecast` (fora do OneDrive, ADR-005). GitHub: https://github.com/diogogs/energia-forecast (público, CI verde).
 
@@ -127,10 +127,13 @@ Ver `.env.example` — ENTSOE_API_TOKEN, DATABASE_URL (pooled), DATABASE_URL_DIR
 - [x] **Neon criado** (projeto `energia-forecast`, AWS eu-central-1, PG18). Connection strings (pooled + direct) verificadas e guardadas em `.env` **local** (fora do repo).
 - [x] **Camada de BD** — `src/config.py` (pydantic-settings), `src/db/base.py` (DeclarativeBase + naming conventions), `src/db/models.py` (`raw.omie_price`), `src/db/engine.py` (psycopg3, pool_pre_ping).
 - [x] **Migração alembic 001 aplicada ao Neon** — 6 schemas (raw/clean/features/pred/ops/meta) + `raw.omie_price` (`first_seen_at` escrito só no INSERT). `alembic_version=0001`.
+- [x] **Repositório de upsert OMIE + backfill completo** (branch `feat/omie-upsert-backfill`, merged? não — ver git). `src/db/repositories/omie.py` (`ON CONFLICT DO UPDATE`, `first_seen_at` nunca mutado, caller controla a transação); teste de integração (marker `integration`, skip sem BD) + serviço Postgres no CI (`alembic upgrade head`); `src/ingestion/omie_backfill.py` (idempotente, commit por dia). **Fetcher com fallback de versão** — o OMIE às vezes retira o `.1` e só publica `.2`/`.3` (casos reais 2025-11-27→.2, 2025-10-30→.3); tenta `.1..5`, guarda a versão real em `source_file`. **`raw.omie_price`: 84 238 linhas, 918 dias contíguos 2024-01-01→2026-07-06, PT==ES, todos os dias-DST corretos.**
+- [x] **Módulo REN completo + backfill corrido** (mesma branch). Contrato da API descoberto e verificado ao vivo (ADR-008): um só endpoint `ProductionBreakdown` dá `Consumption` (target Fase 1) + geração por tecnologia, 15-min. **Timezone Lisboa confirmado decisivamente** vs Energy-Charts PT (lag 0h, corr 1.0000, MW iguais ao decimal). `src/ingestion/sources/ren.py` (fetch+parse, âncora Europe/Lisbon DST-correta, skip de nulls, ticks .NET), `raw.ren_realised` (tall) + `meta.ren_series` (dimensão, 12 séries seeded), migração 0002, repositório upsert, backfill runner. **35 testes verdes.** Schema decidido por painel de design (3 propostas + juiz). **`raw.ren_realised`: 1 058 640 linhas, 919 dias contíguos 2024-01-01→2026-07-07, 12 séries × 88 220 slots, zero gaps, dias-DST todos 92/100 corretos, zero séries por classificar.** Curiosidade validada: mínimo de consumo 87.6 MW = apagão ibérico 2025-04-28 (dado real; próximo dia mais baixo 3 643 MW).
+- [x] **Token ENTSO-E recebido e validado** (2026-07-08) — guardado em `.env` local (`ENTSOE_API_TOKEN`); smoke test OK (PT load horário via `entsoe-py`). Continua **fora do caminho crítico** (ADR-007, validação cruzada). Quando for usado em CI: adicionar a GitHub Secrets. NUNCA em ficheiros versionados (repo público; `.gitignore` reforçado contra dumps de segredos).
 
 ### A seguir (retomar aqui)
-- [ ] **Repositório de upsert OMIE + backfill 2024-01→** — `INSERT ... ON CONFLICT DO UPDATE` (nunca tocar `first_seen_at`); expandir cada `MarginalPrice` em 2 linhas (PT, ES); provar idempotência (correr 2×, `first_seen_at` inalterado).
-- [ ] **Módulo REN** (`src/ingestion/sources/ren.py`) — consumo + geração 15-min; tabelas raw + migração 002.
+- [ ] **Review adversarial** do diff REN (workflow) antes de merge da branch para `main`.
+- [ ] **Módulo Energy-Charts** — load/geração de ES (features).
 - [ ] **Módulo Energy-Charts** — load/geração ES (features).
 - [ ] **Camadas clean + features**, baselines, backtesting (Semanas 3-4).
 - [ ] **Ingestão diária automática** (critério de saída W2: 3+ dias sem intervenção).
