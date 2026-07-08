@@ -16,17 +16,9 @@ from sqlalchemy.orm import Session
 
 from src.db.models import OmiePrice, RenRealised
 from src.features import temporal
+from src.features.hourly import to_hourly
 
 CONSUMPTION_SERIES = "Consumption"  # the Phase-1 target series in raw.ren_realised
-
-
-def _to_hourly(pairs: list[tuple[dt.datetime, float]]) -> pd.Series[float]:
-    """Resample (ts_utc, value) pairs to the hourly UTC grid by mean; empty in -> empty out."""
-    if not pairs:
-        return pd.Series(dtype="float64")
-    index = pd.DatetimeIndex([ts for ts, _ in pairs])
-    series = pd.Series([value for _, value in pairs], index=index, dtype="float64").sort_index()
-    return series.resample("1h").mean().dropna()
 
 
 class AsOfRepo:
@@ -51,7 +43,7 @@ class AsOfRepo:
             for ts, value in self._session.execute(stmt).all()
             if temporal.ren_published_at(ts) <= t_issue
         ]
-        return _to_hourly(legal)
+        return to_hourly(legal)
 
     def hourly_price(self, zone: str, t_issue: dt.datetime) -> pd.Series[float]:
         """MIBEL day-ahead price (EUR/MWh) for ``zone``, hourly-mean UTC, published by ``t_issue``.
@@ -69,4 +61,4 @@ class AsOfRepo:
             for ts, market_date, price in self._session.execute(stmt).all()
             if temporal.omie_published_at(market_date) <= t_issue
         ]
-        return _to_hourly(legal)
+        return to_hourly(legal)

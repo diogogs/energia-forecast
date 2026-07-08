@@ -138,9 +138,11 @@ Ver `.env.example` — ENTSOE_API_TOKEN, DATABASE_URL (pooled), DATABASE_URL_DIR
 
 - [x] **Fundação temporal da camada features** (ADR-011) — o coração anti-leakage. `src/features/temporal.py`: `t_issue` fixo 07:00 UTC, grelha de entrega CET DST-correta (23/24/25h), e **modelo de publicação conservador** por fonte (REN/EC: meia-noite seguinte; OMIE: 13:00 CET de D−1; Open-Meteo: run de `valid_date−lead` às 06:00 UTC). `src/features/asof_repo.py`: **AsOfRepo** — único caminho de leitura legal (só `published_at ≤ t_issue`), resample horário on-the-fly ("clean" não materializado, poupa Neon). **Validado ao vivo** no fold 2024-06-10: consumo termina no fim do dia-Lisboa D−1 (zero leakage); preço PT inclui horas do dia D pós-07:00 (day-ahead já publicado) mas nunca D+1. **85 testes verdes** (marker `leakage` = gate de merge).
 
+- [x] **`build_features` (consumo Fase 1) + baselines + primeiros números** (via AsOfRepo, sem queries diretas). `src/features/build_features.py`: calendário em **hora de Lisboa** (`holidays` PT — o offset PT/CET faz a 1ª hora do Ano Novo CET cair ainda em 31-dez Lisboa, tratado corretamente), lags legais {48,72,168,336h} relativos ao target, rolling recente ≤ fim D−1. `src/features/target.py`: label = consumo realizado no dia CET. `src/models/baselines.py`: persistência −48h e sazonal −168h (colunas de lag, mesmo pipeline). **Avaliação em 31 folds (2024-05→2025-03): persistência MAE 522 MW / MAPE 9.16%; sazonal-semanal MAE 297 / MAPE 4.83%.** A sazonal é a baseline a bater. 91 testes verdes.
+
 ### A seguir (retomar aqui)
-- [ ] **`build_features` + baselines** — calendário (`holidays` PT), lags legais (consumo {48,72,168,336h}, preço {24,48,168h}), rolling ≤ fim D−1, meteo prevista (temp/HDD/CDD, radiação, vento³). Baselines de persistência (consumo −48h, preço −24h, sazonal −168h) pelo mesmo `build_features`. Tudo via AsOfRepo.
-- [ ] **Backtesting rolling-origin** + gate like-for-like (nenhum modelo aceite sem bater ambas as baselines).
+- [ ] **Meteo como feature** — `AsOfRepo.weather_forecast` (lead legal selecionado) + transforms (HDD/CDD, vento³ capped, radiação) no `build_features`.
+- [ ] **1º modelo LightGBM** (`regression_l1`, hora como feature) + **backtesting rolling-origin** + gate like-for-like (nenhum modelo aceite sem bater ambas as baselines nos mesmos folds). Tabelas `pred.predictions` / `pred.backtest_predictions`.
 - [ ] **Ingestão diária automática** (GitHub Actions crons) — critério de saída W2: 3+ dias sem intervenção.
 - [ ] **Camadas clean + features**, baselines, backtesting (Semanas 3-4).
 - [ ] **Ingestão diária automática** (critério de saída W2: 3+ dias sem intervenção).
