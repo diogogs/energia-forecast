@@ -118,3 +118,32 @@ class EnergyChartsPower(Base):
     last_seen_at: Mapped[dt.datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
+
+
+class OpenMeteoForecast(Base):
+    """raw.openmeteo_forecast — archived ECMWF forecasts (leakage-free training weather).
+
+    Tall, UTC-native. ``lead_days`` (1|2) is which archived run the value came from: the run
+    initialised that many days before the valid date. Only lead 1/2 are stored (never the
+    near-analysis current run — that would leak). The features layer picks the legal lead per
+    ``t_issue`` (ADR-010). ``value``/``unit`` are native Open-Meteo (°C, km/h, W/m²).
+    """
+
+    __tablename__ = "openmeteo_forecast"
+    __table_args__ = {"schema": "raw"}  # noqa: RUF012 — SQLAlchemy config, not a mutable default
+
+    location: Mapped[str] = mapped_column(String(16), primary_key=True)  # slug, e.g. 'lisbon'
+    variable: Mapped[str] = mapped_column(String(32), primary_key=True)
+    lead_days: Mapped[int] = mapped_column(SmallInteger, primary_key=True)  # 1 | 2
+    ts_utc: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), primary_key=True)
+
+    value: Mapped[float] = mapped_column(Float, nullable=False)
+    unit: Mapped[str] = mapped_column(String(12), nullable=False)
+    source_ref: Mapped[str] = mapped_column(String, nullable=False)
+
+    first_seen_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    last_seen_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
