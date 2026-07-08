@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import datetime as dt
 
-from sqlalchemy import Boolean, Date, DateTime, Float, Index, SmallInteger, String, func, text
+from sqlalchemy import Boolean, Date, DateTime, Float, SmallInteger, String, func, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from src.db.base import Base
@@ -47,11 +47,9 @@ class RenRealised(Base):
     """
 
     __tablename__ = "ren_realised"
-    __table_args__ = (
-        # Cross-series scan over a ts_utc range (clean-layer pivot + [now-3d,now] re-ingest).
-        Index("ix_ren_realised_ts_utc_series_name", "ts_utc", "series_name"),
-        {"schema": "raw"},
-    )
+    # Secondary index removed in 0004 to reclaim Neon free-tier space until the clean layer
+    # exists and can justify one on real queries (ADR-009).
+    __table_args__ = {"schema": "raw"}  # noqa: RUF012 — SQLAlchemy config, not a mutable default
 
     series_name: Mapped[str] = mapped_column(String(40), primary_key=True)
     ts_utc: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), primary_key=True)
@@ -89,5 +87,34 @@ class RenSeries(Base):
     kind: Mapped[str] = mapped_column(String(16), nullable=False)
     is_target: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
     first_seen_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
+class EnergyChartsPower(Base):
+    """raw.energy_charts_power — Energy-Charts load + generation by type (ES features).
+
+    Tall layout, UTC-native (no local_date/period — unix_seconds are already UTC instants).
+    ``value_mw`` is signed (cross-border trading, pumped-storage consumption go negative).
+    ES-only today, but ``country`` is in the key so the table generalises (ADR-009).
+    """
+
+    __tablename__ = "energy_charts_power"
+    # No secondary index yet: the clean layer (which would pivot by ts_utc range) is unbuilt,
+    # and Neon free-tier space is scarce — add one when a real query needs it (ADR-009).
+    __table_args__ = {"schema": "raw"}  # noqa: RUF012 — SQLAlchemy config, not a mutable default
+
+    country: Mapped[str] = mapped_column(String(2), primary_key=True)  # ISO-2 lower-case
+    production_type: Mapped[str] = mapped_column(String(48), primary_key=True)
+    ts_utc: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), primary_key=True)
+    resolution_minutes: Mapped[int] = mapped_column(SmallInteger, primary_key=True)
+
+    value_mw: Mapped[float] = mapped_column(Float, nullable=False)  # signed MW
+    source_ref: Mapped[str] = mapped_column(String, nullable=False)
+
+    first_seen_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    last_seen_at: Mapped[dt.datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
