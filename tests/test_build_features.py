@@ -19,12 +19,22 @@ from src.models import baselines
 class _StubRepo:
     """Minimal AsOfRepo stand-in exposing only what build_features uses."""
 
-    def __init__(self, series: pd.Series) -> None:
+    def __init__(self, series: pd.Series, weather: pd.DataFrame | None = None) -> None:
         self._series = series
+        self._weather = weather if weather is not None else pd.DataFrame()
 
     def hourly_consumption(self, t_issue: dt.datetime) -> pd.Series:
         # The stub series is already pre-t_issue by construction.
         return self._series
+
+    def weather_forecast(
+        self, t_issue: dt.datetime, target_hours: list[dt.datetime]
+    ) -> pd.DataFrame:
+        return (
+            self._weather.reindex(pd.DatetimeIndex(target_hours))
+            if not self._weather.empty
+            else pd.DataFrame()
+        )
 
 
 def _legal_consumption(issue: dt.date) -> pd.Series:
@@ -89,6 +99,34 @@ def test_calendar_features_follow_lisbon_time() -> None:
     )  # delivery Wed 2024-06-12
     assert not x2["is_holiday"].any()
     assert not x2["is_weekend"].any()
+
+
+def test_weather_transforms() -> None:
+    issue = dt.date(2024, 6, 10)
+    hours = temporal.delivery_hours_utc(temporal.delivery_date_for(issue))
+    # Canned weather: cold+windy first hour, hot+calm second, rest neutral.
+    weather = pd.DataFrame(
+        {
+            "temperature_2m": [10.0, 30.0] + [20.0] * (len(hours) - 2),
+            "wind_speed_100m": [60.0, 5.0] + [20.0] * (len(hours) - 2),  # 60 > cap 43
+            "shortwave_radiation": [0.0, 800.0] + [100.0] * (len(hours) - 2),
+        },
+        index=pd.DatetimeIndex(hours),
+    )
+    x = build_consumption_features(_StubRepo(_legal_consumption(issue), weather), issue)  # type: ignore[arg-type]
+    assert x["hdd"].iloc[0] == 8.0  # 18 - 10
+    assert x["cdd"].iloc[0] == 0.0
+    assert x["hdd"].iloc[1] == 0.0
+    assert x["cdd"].iloc[1] == 9.0  # 30 - 21
+    assert x["wind_cube"].iloc[0] == 43.0**3  # capped before cubing
+    assert x["radiation"].iloc[1] == 800.0
+
+
+def test_missing_weather_yields_nan_columns() -> None:
+    issue = dt.date(2024, 6, 10)
+    x = build_consumption_features(_StubRepo(_legal_consumption(issue)), issue)  # type: ignore[arg-type]
+    assert {"temp", "hdd", "cdd", "wind_cube", "radiation"} <= set(x.columns)
+    assert x["temp"].isna().all()  # no weather available -> NaN (LightGBM tolerates)
 
 
 def test_baselines_select_the_legal_lag_columns() -> None:

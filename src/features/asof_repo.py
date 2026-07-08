@@ -14,7 +14,7 @@ import pandas as pd
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from src.db.models import OmiePrice, RenRealised
+from src.db.models import OmiePrice, OpenMeteoForecast, RenRealised
 from src.features import temporal
 from src.features.hourly import to_hourly
 
@@ -62,3 +62,41 @@ class AsOfRepo:
             if temporal.omie_published_at(market_date) <= t_issue
         ]
         return to_hourly(legal)
+
+    def weather_forecast(
+        self, t_issue: dt.datetime, target_hours: list[dt.datetime]
+    ) -> pd.DataFrame:
+        """Archived weather forecast for the target hours, legal as-of ``t_issue``.
+
+        For each (location, variable, hour) we take the FRESHEST lead whose run was disseminated
+        by ``t_issue`` (lead 1 for a D+1 hour, else lead 2), then average over locations. Columns
+        are the Open-Meteo variables; the index is ``target_hours``. These are forecasts, so
+        their valid times are legitimately in the future relative to ``t_issue``.
+        """
+        if not target_hours:
+            return pd.DataFrame()
+        stmt = select(
+            OpenMeteoForecast.location,
+            OpenMeteoForecast.variable,
+            OpenMeteoForecast.lead_days,
+            OpenMeteoForecast.ts_utc,
+            OpenMeteoForecast.value,
+        ).where(
+            OpenMeteoForecast.ts_utc >= target_hours[0],
+            OpenMeteoForecast.ts_utc <= target_hours[-1],
+        )
+        legal = [
+            {"location": loc, "variable": var, "lead_days": lead, "ts_utc": ts, "value": value}
+            for loc, var, lead, ts, value in self._session.execute(stmt).all()
+            if temporal.openmeteo_published_at(ts, lead) <= t_issue
+        ]
+        index = pd.DatetimeIndex(target_hours)
+        if not legal:
+            return pd.DataFrame(index=index)
+        frame = pd.DataFrame(legal)
+        # Freshest legal lead per (location, variable, hour), then mean over locations.
+        freshest = frame.sort_values("lead_days").drop_duplicates(
+            ["location", "variable", "ts_utc"], keep="first"
+        )
+        wide = freshest.groupby(["ts_utc", "variable"])["value"].mean().unstack("variable")
+        return wide.reindex(index)

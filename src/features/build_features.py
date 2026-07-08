@@ -20,7 +20,33 @@ from src.features.asof_repo import AsOfRepo
 # Legal consumption lags relative to the target hour (hours). 24h is deliberately excluded.
 CONSUMPTION_LAGS_H = (48, 72, 168, 336)
 
+# Weather transforms. Degree-hour bases for Iberia; wind is capped near a turbine's rated speed
+# before cubing (power ~ wind^3 up to rated, flat after). Units: temp °C, wind km/h.
+HDD_BASE_C = 18.0
+CDD_BASE_C = 21.0
+WIND_CAP_KMH = 43.0  # ~12 m/s
+
 _PT_HOLIDAYS = holidays.country_holidays("PT")
+
+
+def _add_weather_features(features: pd.DataFrame, weather: pd.DataFrame) -> pd.DataFrame:
+    """Join location-averaged forecast weather and derive HDD/CDD/wind^3/radiation."""
+    temp = weather["temperature_2m"] if "temperature_2m" in weather else pd.Series(dtype="float64")
+    wind = (
+        weather["wind_speed_100m"] if "wind_speed_100m" in weather else pd.Series(dtype="float64")
+    )
+    radiation = (
+        weather["shortwave_radiation"]
+        if "shortwave_radiation" in weather
+        else pd.Series(dtype="float64")
+    )
+    derived = pd.DataFrame(index=features.index)
+    derived["temp"] = temp.reindex(features.index)
+    derived["hdd"] = (HDD_BASE_C - derived["temp"]).clip(lower=0)
+    derived["cdd"] = (derived["temp"] - CDD_BASE_C).clip(lower=0)
+    derived["wind_cube"] = wind.reindex(features.index).clip(upper=WIND_CAP_KMH) ** 3
+    derived["radiation"] = radiation.reindex(features.index)
+    return features.join(derived)
 
 
 def build_consumption_features(repo: AsOfRepo, issue_date: dt.date) -> pd.DataFrame:
@@ -51,4 +77,6 @@ def build_consumption_features(repo: AsOfRepo, issue_date: dt.date) -> pd.DataFr
             row[f"cons_lag_{lag_h}h"] = float(legal_consumption.get(key, float("nan")))
         rows.append(row)
 
-    return pd.DataFrame(rows).set_index("target_ts")
+    features = pd.DataFrame(rows).set_index("target_ts")
+    weather = repo.weather_forecast(t_issue, delivery_hours)
+    return _add_weather_features(features, weather)
