@@ -45,23 +45,29 @@ def backfill_omie(
     factory = make_session_factory(engine)
     owns_client = client is None
     client = client or httpx.Client()
-    stats = {"days_ingested": 0, "days_missing": 0, "rows": 0}
+    stats = {"days_ingested": 0, "days_missing": 0, "days_failed": 0, "rows": 0}
 
     try:
         day = start
         while day <= end:
-            file = fetch_marginalpdbc(day, client)
-            if file is not None:
-                prices = parse_marginalpdbc(file.text)
-                with factory() as session:
-                    written = upsert_omie_prices(session, prices, file.filename)
-                    session.commit()
-                stats["days_ingested"] += 1
-                stats["rows"] += written
-                logger.info("%s: upserted %d rows from %s", day, written, file.filename)
-            else:
-                stats["days_missing"] += 1
-                logger.warning("%s: no file published (all versions absent)", day)
+            # One bad day must not kill the range: log it, count it, move on.
+            # The upsert is idempotent, so a resume/re-run heals failed days.
+            try:
+                file = fetch_marginalpdbc(day, client)
+                if file is not None:
+                    prices = parse_marginalpdbc(file.text)
+                    with factory() as session:
+                        written = upsert_omie_prices(session, prices, file.filename)
+                        session.commit()
+                    stats["days_ingested"] += 1
+                    stats["rows"] += written
+                    logger.info("%s: upserted %d rows from %s", day, written, file.filename)
+                else:
+                    stats["days_missing"] += 1
+                    logger.warning("%s: no file published (all versions absent)", day)
+            except Exception:
+                stats["days_failed"] += 1
+                logger.exception("%s: ingestion failed; continuing", day)
             day += dt.timedelta(days=1)
             if polite_delay_s:
                 time.sleep(polite_delay_s)
@@ -71,9 +77,10 @@ def backfill_omie(
         engine.dispose()
 
     logger.info(
-        "done: %d days ingested, %d missing, %d rows",
+        "done: %d days ingested, %d missing, %d failed, %d rows",
         stats["days_ingested"],
         stats["days_missing"],
+        stats["days_failed"],
         stats["rows"],
     )
     return stats

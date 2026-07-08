@@ -50,7 +50,9 @@ def test_upsert_is_idempotent_and_preserves_first_seen_at(pg_session: Session) -
         before = _load(pg_session)
         assert before is not None
         assert before.value_mw == 500.0
+        # Scalars, not the ORM object — the identity map hands back the same instance later.
         first_seen = before.first_seen_at
+        last_seen_before = before.last_seen_at
 
         # Re-ingestion (a revised value + new provenance): same key.
         upsert_ren_observations(pg_session, _sample(555.0), "ren:test:v2")
@@ -61,7 +63,9 @@ def test_upsert_is_idempotent_and_preserves_first_seen_at(pg_session: Session) -
         assert after.value_mw == 555.0  # revised
         assert after.source_ref == "ren:test:v2"  # provenance updated
         assert after.first_seen_at == first_seen  # frozen
-        assert after.last_seen_at >= first_seen  # advanced
+        assert after.last_seen_at > last_seen_before  # strictly advanced by the DO UPDATE
     finally:
+        # Clear any aborted-transaction state so the sentinel cleanup always runs.
+        pg_session.rollback()
         pg_session.execute(delete(RenRealised).where(RenRealised.series_name == _SENTINEL_SERIES))
         pg_session.commit()

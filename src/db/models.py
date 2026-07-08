@@ -85,7 +85,8 @@ class RenSeries(Base):
 
     series_name: Mapped[str] = mapped_column(String(40), primary_key=True)
     series_code: Mapped[str] = mapped_column(String(32), nullable=False)  # canonical snake_case
-    kind: Mapped[str] = mapped_column(String(16), nullable=False)  # 'load' | 'generation' | 'flow'
+    # 'load' | 'generation' | 'flow' | 'storage'
+    kind: Mapped[str] = mapped_column(String(16), nullable=False)
     is_target: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
     first_seen_at: Mapped[dt.datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()

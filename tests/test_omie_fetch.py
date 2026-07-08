@@ -44,6 +44,15 @@ def test_fetch_falls_back_to_higher_version_when_1_absent() -> None:
     assert file.filename == "marginalpdbc_20251127.2"
 
 
+def test_fetch_prefers_lowest_version_when_several_exist() -> None:
+    # Scan order matters: .1 (the D-1 publication the market saw) must win over .2.
+    # A reversed loop (highest-first) would pass the other tests but fail this one.
+    with _client({"marginalpdbc_20251127.1", "marginalpdbc_20251127.2"}) as client:
+        file = fetch_marginalpdbc(dt.date(2025, 11, 27), client)
+    assert file is not None
+    assert file.filename == "marginalpdbc_20251127.1"
+
+
 def test_fetch_returns_none_when_all_versions_absent() -> None:
     with _client(set()) as client:
         file = fetch_marginalpdbc(dt.date(2025, 10, 30), client)

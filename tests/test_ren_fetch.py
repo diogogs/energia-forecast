@@ -41,3 +41,9 @@ def test_fetch_returns_none_on_404() -> None:
 def test_fetch_returns_none_when_payload_lacks_series() -> None:
     with _client(200, {"xAxis": {"categories": []}}) as client:
         assert fetch_production_breakdown(dt.date(2024, 6, 1), client) is None
+
+
+def test_fetch_returns_none_on_non_json_200() -> None:
+    # A maintenance/error page served with HTTP 200 must not crash the ingest.
+    with _client(200, "<html>scheduled maintenance</html>") as client:
+        assert fetch_production_breakdown(dt.date(2024, 6, 1), client) is None

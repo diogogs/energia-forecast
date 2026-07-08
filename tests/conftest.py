@@ -7,6 +7,7 @@ locally and against the CI service container — and skip cleanly when neither i
 
 from __future__ import annotations
 
+import os
 from collections.abc import Iterator
 
 import pytest
@@ -19,10 +20,17 @@ from src.db.engine import make_engine, make_session_factory
 
 @pytest.fixture(scope="session")
 def pg_engine() -> Iterator[Engine]:
-    """Engine for integration tests; skips the test if no database is configured."""
+    """Engine for integration tests; skips (locally) or fails (CI) without a database.
+
+    In CI the integration tests are the enforcement of the idempotency and
+    first_seen_at-immutability rules — a silent skip there would look green while
+    verifying nothing, so a missing DATABASE_URL is an error, not a skip.
+    """
     settings = get_settings()
     url = settings.database_url_direct or settings.database_url
     if not url:
+        if os.environ.get("CI"):
+            pytest.fail("CI must provide DATABASE_URL for integration tests (service container)")
         pytest.skip("no DATABASE_URL(_DIRECT) configured — skipping Postgres integration test")
     engine = make_engine(url)
     try:

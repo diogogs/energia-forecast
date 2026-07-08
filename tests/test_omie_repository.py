@@ -60,7 +60,10 @@ def test_upsert_is_idempotent_and_preserves_first_seen_at(pg_session: Session) -
         assert set(before) == {"PT", "ES"}
         assert before["PT"].price_eur_mwh == 50.0
         assert before["ES"].price_eur_mwh == 40.0
+        # Capture scalars, not ORM objects: the identity map returns the SAME objects on
+        # the next _load, so attribute reads after expire would see post-update values.
         first_seen = {zone: row.first_seen_at for zone, row in before.items()}
+        last_seen_before = {zone: row.last_seen_at for zone, row in before.items()}
 
         # Re-ingestion (a corrected publication): same key, new prices + new source file.
         upsert_omie_prices(pg_session, _sample(55.0, 45.0), "marginalpdbc_test_v2.1")
@@ -73,10 +76,14 @@ def test_upsert_is_idempotent_and_preserves_first_seen_at(pg_session: Session) -
         assert after["PT"].price_eur_mwh == 55.0
         assert after["ES"].price_eur_mwh == 45.0
         assert {row.source_file for row in after.values()} == {"marginalpdbc_test_v2.1"}
-        # first_seen_at frozen; last_seen_at advanced past it.
+        # first_seen_at frozen; last_seen_at STRICTLY advanced (>= would pass even if the
+        # DO UPDATE stopped touching it, since both default to the same now() on INSERT).
         for zone, row in after.items():
             assert row.first_seen_at == first_seen[zone]
-            assert row.last_seen_at >= first_seen[zone]
+            assert row.last_seen_at > last_seen_before[zone]
     finally:
+        # A failed assertion may leave the session in an aborted transaction; clear it so
+        # the sentinel cleanup always runs instead of masking the original failure.
+        pg_session.rollback()
         pg_session.execute(delete(OmiePrice).where(OmiePrice.ts_utc == _SENTINEL_TS))
         pg_session.commit()

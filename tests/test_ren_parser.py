@@ -122,11 +122,27 @@ def test_signed_values_preserved() -> None:
         },  # ragged
         {"series": [{"name": "A", "data": [1.0] * 50}]},  # invalid slot count
         {"series": [{"name": "", "data": [1.0] * 96}]},  # empty series name
+        {
+            "series": [{"name": "A", "data": [1.0] * 96}, {"name": "A", "data": [2.0] * 96}]
+        },  # duplicate name -> repeated natural keys would break the single-statement upsert
     ],
 )
 def test_malformed_payload_raises(payload: dict) -> None:
     with pytest.raises(RenParseError):
         parse_production_breakdown(payload, dt.date(2024, 6, 15))
+
+
+def test_slot_count_must_match_the_days_civil_length() -> None:
+    # 92 slots is a valid DST count — but only on a 23h spring-forward day. On a normal
+    # 96-slot day it must raise: accepting it would emit timestamps that stop 1h short
+    # (or, for 96-on-92, spill into the next day and collide with its rows on upsert).
+    payload = {"series": [{"name": "Consumption", "data": [1.0] * 92}]}
+    with pytest.raises(RenParseError, match="does not match"):
+        parse_production_breakdown(payload, dt.date(2024, 6, 15))
+    # And the converse: 96 slots on the 92-slot spring-forward day.
+    payload = {"series": [{"name": "Consumption", "data": [1.0] * 96}]}
+    with pytest.raises(RenParseError, match="does not match"):
+        parse_production_breakdown(payload, dt.date(2024, 3, 31))
 
 
 def test_to_ticks_matches_dotnet_midnight() -> None:
