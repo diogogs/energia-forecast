@@ -1,15 +1,47 @@
-"""Tests for the daily self-healing runner: window computation and per-source isolation."""
+"""Tests for the daily self-healing runner: window computation, per-source isolation, dq events.
+
+run_daily records each source's outcome to ops.dq_log through a real engine — these are unit
+tests, so the DB seam (engine/factory) and the recorder are stubbed out. Regression guard: an
+earlier version of this file stubbed only the sources, and the suite wrote fake dq events to
+whatever database .env pointed at.
+"""
 
 from __future__ import annotations
 
 import datetime as dt
+from typing import Any
 
 import pytest
 
 from src.ingestion import daily
 
 
-def test_window_spans_days_back_and_all_sources_run(monkeypatch: pytest.MonkeyPatch) -> None:
+class _StubSession:
+    def __enter__(self) -> _StubSession:
+        return self
+
+    def __exit__(self, *exc: object) -> None:
+        return None
+
+    def commit(self) -> None:
+        return None
+
+
+@pytest.fixture
+def dq_events(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, Any]]:
+    """Stub the DB seam and capture record_dq_event calls (no real database touched)."""
+    events: list[dict[str, Any]] = []
+    monkeypatch.setattr(
+        daily, "make_engine", lambda: type("E", (), {"dispose": lambda self: None})()
+    )
+    monkeypatch.setattr(daily, "make_session_factory", lambda engine: _StubSession)
+    monkeypatch.setattr(daily, "record_dq_event", lambda session, **kwargs: events.append(kwargs))
+    return events
+
+
+def test_window_spans_days_back_and_all_sources_run(
+    monkeypatch: pytest.MonkeyPatch, dq_events: list[dict[str, Any]]
+) -> None:
     calls: dict[str, tuple[dt.date, dt.date]] = {}
 
     def make(name: str):
@@ -31,22 +63,36 @@ def test_window_spans_days_back_and_all_sources_run(monkeypatch: pytest.MonkeyPa
     for start, end in calls.values():
         assert end == today
         assert (end - start).days == 3
+    # One durable dq event per source, all clean runs → severity info.
+    assert [e["severity"] for e in dq_events] == ["info"] * 4
 
 
-def test_one_source_failing_does_not_stop_the_others(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_one_source_failing_does_not_stop_the_others(
+    monkeypatch: pytest.MonkeyPatch, dq_events: list[dict[str, Any]]
+) -> None:
     def ok(start: dt.date, end: dt.date) -> dict[str, int]:
         return {"rows": 5}
+
+    def partial(start: dt.date, end: dt.date) -> dict[str, int]:
+        return {"rows": 5, "days_failed": 1}
 
     def boom(start: dt.date, end: dt.date) -> dict[str, int]:
         raise RuntimeError("source down")
 
     monkeypatch.setitem(daily._SOURCES, "omie", boom)
-    monkeypatch.setitem(daily._SOURCES, "ren", ok)
+    monkeypatch.setitem(daily._SOURCES, "ren", partial)
     monkeypatch.setitem(daily._SOURCES, "energy_charts", ok)
     monkeypatch.setitem(daily._SOURCES, "openmeteo", ok)
 
     summary = daily.run_daily(days_back=1)
 
     assert summary["omie"] == "FAILED"
-    assert summary["ren"] == {"rows": 5}  # the others still ran
+    assert summary["ren"] == {"rows": 5, "days_failed": 1}  # the others still ran
     assert summary["energy_charts"] == {"rows": 5}
+    # dq severities: hard failure → error, survived-with-failed-days → warning, clean → info.
+    by_source = {e["source"]: e for e in dq_events}
+    assert by_source["omie"]["severity"] == "error"
+    assert "source down" in by_source["omie"]["detail"]
+    assert by_source["ren"]["severity"] == "warning"
+    assert by_source["energy_charts"]["severity"] == "info"
+    assert by_source["energy_charts"]["rows_written"] == 5
