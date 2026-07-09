@@ -173,6 +173,4 @@ Ver `.env.example` — ENTSOE_API_TOKEN, DATABASE_URL (pooled), DATABASE_URL_DIR
 - [ ] **Hardening restante** — drift, ENTSO-E cross-validation (opcional), config DagsHub para MLflow remoto.
 - [ ] **Write-up do projeto** (`docs/posts/`) — o multiplicador de portfólio; fazer quando houver ~1 semana de track record live.
 - [ ] **Dashboard P2** (backlog): navegação temporal (arquivo de previsões), evolução do erro live, feature importance, bilingue.
-- [ ] **Camadas clean + features**, baselines, backtesting (Semanas 3-4).
-- [ ] **Ingestão diária automática** (critério de saída W2: 3+ dias sem intervenção).
-- [ ] Token ENTSO-E: aguardar aprovação (~3 dias úteis) — depois gerar em My Account Settings e adicionar a `.env`/Secrets (opcional, validação cruzada).
+- [ ] **Contexto paralelo:** site pessoal de portfólio em construção em `C:\dev\diogogs.github.io` (Astro + GitHub Pages; decisões e perfil na memória do Claude) — o write-up deste projeto será a peça fundadora do site.
