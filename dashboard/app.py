@@ -14,7 +14,19 @@ import httpx
 import pandas as pd
 import streamlit as st
 
-API_BASE_URL = os.environ.get("API_BASE_URL", "http://localhost:8000")
+
+def _api_base_url() -> str:
+    """Resolve the API URL from Streamlit secrets (Cloud), then env var, then localhost."""
+    try:
+        secret = st.secrets.get("API_BASE_URL")  # raises if no secrets file is configured
+        if secret:
+            return str(secret)
+    except Exception:
+        pass
+    return os.environ.get("API_BASE_URL", "http://localhost:8000")
+
+
+API_BASE_URL = _api_base_url()
 LISBON = "Europe/Lisbon"
 
 # Validated categorical palette (dataviz reference slots): realised, model, two baselines.
