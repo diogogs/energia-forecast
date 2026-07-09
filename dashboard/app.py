@@ -165,6 +165,21 @@ def _render_status() -> None:
             value = f"{err['mae']:.1f} {unit}" if err.get("mae") is not None else "a acumular…"
             col.metric(f"Erro live {target} ({err['hours_scored']}h)", value)
 
+        events = api("/monitoring/dq?limit=8")
+        assert isinstance(events, list)
+        if events:
+            st.caption("Últimas execuções da ingestão diária (ops.dq_log)")
+            ev = pd.DataFrame(events)
+            ev["quando"] = _local(ev["logged_at"]).dt.strftime("%Y-%m-%d %H:%M")
+            ev["estado"] = ev["severity"].map({"info": "✅", "warning": "⚠️", "error": "❌"})
+            st.dataframe(
+                ev[["quando", "source", "estado", "rows_written"]].rename(
+                    columns={"source": "fonte", "rows_written": "linhas"}
+                ),
+                hide_index=True,
+                use_container_width=True,
+            )
+
 
 def _mae_bars(perf: pd.DataFrame, unit: str) -> alt.Chart:
     return (

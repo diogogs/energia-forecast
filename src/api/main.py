@@ -18,7 +18,14 @@ from src.api.schemas import BacktestPoint, Forecast, ForecastPoint, Health, Mode
 from src.config import get_settings
 from src.db.engine import make_engine, make_session_factory
 from src.db.models import BacktestPrediction, Prediction
-from src.monitoring.watchdog import RealisedError, SourceFreshness, data_freshness, realised_error
+from src.monitoring.watchdog import (
+    DqEvent,
+    RealisedError,
+    SourceFreshness,
+    data_freshness,
+    realised_error,
+    recent_dq_events,
+)
 
 TargetName = Literal["consumption", "price"]
 
@@ -134,3 +141,9 @@ def freshness(session: SessionDep) -> list[SourceFreshness]:
 def monitoring_error(target_name: TargetName, session: SessionDep, days: int = 14) -> RealisedError:
     """MAE of the live emitted forecast vs realised outcomes over the last ``days``."""
     return realised_error(session, target_name, days=days)
+
+
+@app.get("/monitoring/dq", response_model=list[DqEvent])
+def monitoring_dq(session: SessionDep, limit: int = 20) -> list[DqEvent]:
+    """Recent data-quality / ingestion events (ops.dq_log) — durable ingestion health."""
+    return recent_dq_events(session, limit=limit)

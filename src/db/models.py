@@ -9,7 +9,19 @@ from __future__ import annotations
 
 import datetime as dt
 
-from sqlalchemy import Boolean, Date, DateTime, Float, SmallInteger, String, func, text
+from sqlalchemy import (
+    BigInteger,
+    Boolean,
+    Date,
+    DateTime,
+    Float,
+    Identity,
+    Integer,
+    SmallInteger,
+    String,
+    func,
+    text,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from src.db.base import Base
@@ -175,6 +187,31 @@ class Prediction(Base):
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
     late_issue: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
+
+
+class DqLog(Base):
+    """ops.dq_log — durable data-quality / ingestion event log ("nunca descartes silenciosos").
+
+    One row per source per daily-ingest run (``check_name='ingest_run'``), with room for finer
+    validation events later. Operational, NOT a feature source: ``logged_at`` is wall-clock
+    (``now()``) and nothing here ever feeds the as-of legality check. Small by design (a handful
+    of rows a day), so no secondary index — a recent-events scan sorts a tiny table.
+    """
+
+    __tablename__ = "dq_log"
+    __table_args__ = {"schema": "ops"}  # noqa: RUF012 — SQLAlchemy config, not a mutable default
+
+    id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
+    logged_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    source: Mapped[str] = mapped_column(String(32), nullable=False)  # omie | ren | ... | pipeline
+    check_name: Mapped[str] = mapped_column(String(48), nullable=False)  # e.g. 'ingest_run'
+    severity: Mapped[str] = mapped_column(String(8), nullable=False)  # info | warning | error
+    window_start: Mapped[dt.date | None] = mapped_column(Date, nullable=True)
+    window_end: Mapped[dt.date | None] = mapped_column(Date, nullable=True)
+    rows_written: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    detail: Mapped[str | None] = mapped_column(String, nullable=True)
 
 
 class BacktestPrediction(Base):

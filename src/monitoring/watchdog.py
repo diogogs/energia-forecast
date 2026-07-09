@@ -10,11 +10,12 @@ from __future__ import annotations
 import datetime as dt
 
 import pandas as pd
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from src.db.models import (
+    DqLog,
     EnergyChartsPower,
     OmiePrice,
     OpenMeteoForecast,
@@ -50,6 +51,33 @@ class RealisedError(BaseModel):
     days: int
     hours_scored: int
     mae: float | None
+
+
+class DqEvent(BaseModel):
+    """A data-quality / ingestion event from ops.dq_log (most recent first when listed)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    logged_at: dt.datetime
+    source: str
+    check_name: str
+    severity: str
+    window_start: dt.date | None
+    window_end: dt.date | None
+    rows_written: int | None
+    detail: str | None
+
+
+def recent_dq_events(session: Session, limit: int = 20) -> list[DqEvent]:
+    """The most recent ops.dq_log events — ingestion health without scraping Actions logs."""
+    rows = (
+        session.execute(
+            select(DqLog).order_by(DqLog.logged_at.desc(), DqLog.id.desc()).limit(limit)
+        )
+        .scalars()
+        .all()
+    )
+    return [DqEvent.model_validate(r) for r in rows]
 
 
 def data_freshness(session: Session, now: dt.datetime | None = None) -> list[SourceFreshness]:
