@@ -75,3 +75,38 @@ def test_predictions_are_insert_only(pg_session: Session) -> None:
         pg_session.rollback()
         pg_session.execute(delete(Prediction).where(Prediction.issue_date == dt.date(2099, 6, 10)))
         pg_session.commit()
+
+
+@pytest.mark.integration
+def test_consumption_and_price_share_a_model_name_without_colliding(pg_session: Session) -> None:
+    # 'seasonal_168h'/'point' exists for BOTH targets; target_name is in the key so both persist.
+    issue, target = dt.date(2099, 6, 10), dt.datetime(2099, 6, 11, 12, tzinfo=dt.UTC)
+    now = dt.datetime(2099, 6, 10, 7, tzinfo=dt.UTC)
+
+    def row(target_name: str, y_hat: float) -> dict[str, object]:
+        return {
+            "issue_date": issue,
+            "target_ts": target,
+            "model_name": "seasonal_168h",
+            "quantile": "point",
+            "target_name": target_name,
+            "y_hat": y_hat,
+            "issued_at": now,
+            "late_issue": False,
+        }
+
+    try:
+        insert_predictions(pg_session, [row("consumption", 5000.0), row("price", 60.0)])
+        pg_session.commit()
+        pg_session.expire_all()
+        stored = (
+            pg_session.execute(select(Prediction).where(Prediction.issue_date == issue))
+            .scalars()
+            .all()
+        )
+        stored_pairs = {(r.target_name, r.y_hat) for r in stored}
+        assert stored_pairs == {("consumption", 5000.0), ("price", 60.0)}
+    finally:
+        pg_session.rollback()
+        pg_session.execute(delete(Prediction).where(Prediction.issue_date == issue))
+        pg_session.commit()

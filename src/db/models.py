@@ -162,12 +162,14 @@ class Prediction(Base):
 
     issue_date: Mapped[dt.date] = mapped_column(Date, primary_key=True)
     target_ts: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), primary_key=True)
+    # target_name is in the key: the same model name (e.g. 'seasonal_168h') serves both targets,
+    # so without it a price forecast would collide with the consumption one (migration 0007).
+    target_name: Mapped[str] = mapped_column(String(16), primary_key=True)  # consumption | price
     model_name: Mapped[str] = mapped_column(String(32), primary_key=True)
     quantile: Mapped[str] = mapped_column(
         String(8), primary_key=True, server_default=text("'point'")
     )
 
-    target_name: Mapped[str] = mapped_column(String(16), nullable=False)  # 'consumption' | 'price'
     y_hat: Mapped[float] = mapped_column(Float, nullable=False)
     issued_at: Mapped[dt.datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
@@ -187,9 +189,9 @@ class BacktestPrediction(Base):
 
     issue_date: Mapped[dt.date] = mapped_column(Date, primary_key=True)
     target_ts: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), primary_key=True)
+    target_name: Mapped[str] = mapped_column(String(16), primary_key=True)  # target-scoped (0007)
     model_name: Mapped[str] = mapped_column(String(32), primary_key=True)
 
-    target_name: Mapped[str] = mapped_column(String(16), nullable=False)
     y_hat: Mapped[float] = mapped_column(Float, nullable=False)
     y_true: Mapped[float | None] = mapped_column(Float, nullable=True)
     created_at: Mapped[dt.datetime] = mapped_column(

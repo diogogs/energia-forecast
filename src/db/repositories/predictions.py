@@ -23,7 +23,7 @@ def insert_predictions(session: Session, rows: list[dict[str, object]]) -> int:
         return 0
     stmt = pg_insert(Prediction).values(rows)
     stmt = stmt.on_conflict_do_nothing(
-        index_elements=["issue_date", "target_ts", "model_name", "quantile"]
+        index_elements=["issue_date", "target_ts", "target_name", "model_name", "quantile"]
     )
     session.execute(stmt)
     return len(rows)  # rows submitted; conflicts are silently kept (insert-only)
@@ -36,7 +36,7 @@ def upsert_backtest_predictions(session: Session, rows: list[dict[str, object]])
         batch = rows[start : start + _MAX_ROWS_PER_STMT]
         stmt = pg_insert(BacktestPrediction).values(batch)
         stmt = stmt.on_conflict_do_update(
-            index_elements=["issue_date", "target_ts", "model_name"],
+            index_elements=["issue_date", "target_ts", "target_name", "model_name"],
             set_={
                 "target_name": stmt.excluded["target_name"],
                 "y_hat": stmt.excluded["y_hat"],

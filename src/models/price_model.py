@@ -82,6 +82,40 @@ def _pinball(actual: pd.Series, predicted: pd.Series, alpha: float) -> float:
     return float(np.maximum(alpha * delta, (alpha - 1) * delta).mean())
 
 
+# Each price model's contribution to pred.backtest_predictions (the quantiles are kept as
+# distinct model names so the dashboard can plot the P10-P90 band from the simulated history).
+_PRICE_BACKTEST_MODEL_COLS = {
+    "lightgbm_p10": "p10",
+    "lightgbm_p50": "p50",
+    "lightgbm_p90": "p90",
+    "persistence_24h": "price_lag_24h",
+    "seasonal_168h": "price_lag_168h",
+}
+
+
+def price_backtest_rows(preds: pd.DataFrame) -> list[dict[str, object]]:
+    """Reshape price backtest predictions into pred.backtest_predictions rows (target 'price')."""
+    records = preds.rename_axis("target_ts").reset_index().to_dict("records")
+    rows: list[dict[str, object]] = []
+    for model_name, col in _PRICE_BACKTEST_MODEL_COLS.items():
+        for rec in records:
+            y_hat = rec[col]
+            if pd.isna(y_hat):
+                continue
+            y_true = rec["y"]
+            rows.append(
+                {
+                    "issue_date": rec["issue_date"],
+                    "target_ts": rec["target_ts"].to_pydatetime(),
+                    "model_name": model_name,
+                    "target_name": "price",
+                    "y_hat": float(y_hat),
+                    "y_true": None if pd.isna(y_true) else float(y_true),
+                }
+            )
+    return rows
+
+
 def rolling_origin_price_backtest(
     matrix: pd.DataFrame, oos_weeks: int = 10
 ) -> tuple[pd.DataFrame, pd.DataFrame]:

@@ -44,11 +44,12 @@ def backtest_run(run_name: str, params: dict[str, object]) -> Iterator[None]:
         yield
 
 
-def log_backtest_metrics(metrics: pd.DataFrame) -> None:
-    """Log MAE/MAPE per model (index = model name) to the active run."""
+def log_metrics_frame(metrics: pd.DataFrame) -> None:
+    """Log every numeric metric cell as ``{model}_{metric}`` (index = model name), skipping NaN."""
     for model_name, row in metrics.iterrows():
-        mlflow.log_metric(f"{model_name}_MAE", float(row["MAE"]))
-        mlflow.log_metric(f"{model_name}_MAPE", float(row["MAPE"]))
+        for metric, value in row.items():
+            if pd.notna(value):
+                mlflow.log_metric(f"{model_name}_{metric}", float(value))
 
 
 def log_feature_importance(feature_names: list[str], importances: list[float]) -> None:
