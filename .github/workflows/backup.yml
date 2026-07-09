@@ -1,0 +1,52 @@
+name: Weekly backup
+
+on:
+  schedule:
+    # Sundays 04:00 UTC — a pg_dump snapshot before the 05:00 backtest, off the daily hot path.
+    - cron: "0 4 * * 0"
+  workflow_dispatch: {}
+
+concurrency:
+  group: weekly-backup
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      # Optional: set this to use an explicit unpooled URL; otherwise it is derived below.
+      DATABASE_URL_DIRECT: ${{ secrets.DATABASE_URL_DIRECT }}
+    steps:
+      # Neon runs PostgreSQL 18; ubuntu's default client is older and refuses to dump a newer
+      # server, so install the matching pg_dump from the PGDG apt repo.
+      - name: Install PostgreSQL 18 client
+        run: |
+          sudo sh -c 'echo "deb https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
+          curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo gpg --dearmor -o /etc/apt/trusted.gpg.d/pgdg.gpg
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client-18
+
+      - name: Dump the database (gzip)
+        run: |
+          set -euo pipefail
+          # pg_dump needs a direct (unpooled) connection — Neon's PgBouncer pooler breaks its
+          # session-level snapshot. Prefer the explicit direct secret; else derive it by stripping
+          # '-pooler' from the pooled URL (Neon's direct/pooled hosts differ only by that token).
+          URL="${DATABASE_URL_DIRECT:-${DATABASE_URL/-pooler/}}"
+          if [ -z "$URL" ]; then echo "No database URL configured (set DATABASE_URL)"; exit 1; fi
+          STAMP=$(date -u +%Y%m%d)
+          OUT="energia-forecast-${STAMP}.sql.gz"
+          pg_dump "$URL" --no-owner --no-privileges --format=plain | gzip -9 > "$OUT"
+          SIZE=$(stat -c%s "$OUT")
+          echo "wrote ${OUT} (${SIZE} bytes)"
+          # Guard against a silently-empty dump (e.g. an auth failure that still produced a file).
+          if [ "$SIZE" -lt 10000 ]; then echo "dump suspiciously small — failing"; exit 1; fi
+
+      - name: Upload backup artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: db-backup
+          path: energia-forecast-*.sql.gz
+          # A rolling ~4-week recovery window on the free tier. Restore: gunzip | psql <direct-url>.
+          retention-days: 30
