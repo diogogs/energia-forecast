@@ -759,7 +759,7 @@ requires-dist = [
 [package.metadata.requires-dev]
 dashboard = [
     { name = "altair", specifier = ">=5.4" },
-    { name = "streamlit", specifier = ">=1.40" },
+    { name = "streamlit", specifier = ">=1.46" },
 ]
 dev = [
     { name = "mypy", specifier = ">=2.1.0" },
