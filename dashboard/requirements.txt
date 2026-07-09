@@ -1,0 +1,7 @@
+# Streamlit Community Cloud installs from this file. The dashboard only needs the client stack
+# (it reads the FastAPI over HTTP — no DB driver, no ML libs). Set API_BASE_URL in the app's
+# secrets to the deployed API URL.
+streamlit>=1.40
+altair>=5.4
+httpx>=0.28
+pandas>=2.3
