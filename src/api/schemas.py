@@ -43,3 +43,13 @@ class ModelPerformance(BaseModel):
     model_name: str
     mae: float
     n: int
+
+
+class HistoryPoint(BaseModel):
+    """A live emitted prediction paired with the realised outcome (null until it arrives)."""
+
+    target_ts: dt.datetime
+    model_name: str
+    quantile: str
+    y_hat: float
+    y_true: float | None

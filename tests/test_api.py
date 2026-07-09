@@ -14,7 +14,7 @@ from sqlalchemy import delete
 from sqlalchemy.orm import Session
 
 from src.api.main import app
-from src.db.models import BacktestPrediction, Prediction
+from src.db.models import BacktestPrediction, Prediction, RenRealised
 
 client = TestClient(app)
 
@@ -79,4 +79,52 @@ def test_forecast_and_performance_surface_seeded_rows(pg_session: Session) -> No
         pg_session.execute(
             delete(BacktestPrediction).where(BacktestPrediction.issue_date == _ISSUE)
         )
+        pg_session.commit()
+
+
+@pytest.mark.integration
+def test_history_pairs_forecast_with_realised(pg_session: Session) -> None:
+    # Two forecast hours; realised exists only for the first → y_true, then null (pending).
+    ts_scored, ts_pending = _TARGET_TS, _TARGET_TS + dt.timedelta(hours=1)
+    try:
+        pg_session.add_all(
+            [
+                Prediction(
+                    issue_date=_ISSUE,
+                    target_ts=ts,
+                    target_name="consumption",
+                    model_name="lightgbm",
+                    quantile="point",
+                    y_hat=5000.0,
+                    issued_at=dt.datetime(2099, 6, 10, 7, tzinfo=dt.UTC),
+                    late_issue=False,
+                )
+                for ts in (ts_scored, ts_pending)
+            ]
+            + [
+                RenRealised(
+                    series_name="Consumption",
+                    ts_utc=ts_scored,
+                    resolution_minutes=15,
+                    value_mw=5200.0,
+                    local_date=ts_scored.date(),
+                    period=1,
+                    source_ref="history-test",
+                )
+            ]
+        )
+        pg_session.commit()
+
+        points = client.get("/history/consumption?days=14").json()
+        by_ts = {  # pydantic serialises UTC as 'Z' — parse back to datetimes to compare
+            dt.datetime.fromisoformat(p["target_ts"]): p
+            for p in points
+            if p["model_name"] == "lightgbm"
+        }
+        assert by_ts[ts_scored]["y_true"] == pytest.approx(5200.0)
+        assert by_ts[ts_pending]["y_true"] is None  # outcome not yet ingested
+    finally:
+        pg_session.rollback()
+        pg_session.execute(delete(Prediction).where(Prediction.issue_date == _ISSUE))
+        pg_session.execute(delete(RenRealised).where(RenRealised.source_ref == "history-test"))
         pg_session.commit()

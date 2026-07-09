@@ -101,10 +101,14 @@ def data_freshness(session: Session, now: dt.datetime | None = None) -> list[Sou
     return out
 
 
-def _realised_hourly(
+def realised_hourly(
     session: Session, target_name: str, lo: dt.datetime, hi: dt.datetime
 ) -> pd.Series[float]:
-    """Hourly-mean realised outcome over [lo, hi): consumption from REN, price from OMIE PT."""
+    """Hourly-mean realised outcome over [lo, hi): consumption from REN, price from OMIE PT.
+
+    Shared by the realised-error scorer below and the API's /history endpoint (which pairs the
+    live emitted forecasts with these outcomes).
+    """
     if target_name == "consumption":
         stmt = select(RenRealised.ts_utc, RenRealised.value_mw).where(
             RenRealised.series_name == CONSUMPTION_SERIES,
@@ -140,7 +144,7 @@ def realised_error(
 
     lo = max(preds[0][0], preds[-1][0] - dt.timedelta(days=days))
     hi = preds[-1][0] + dt.timedelta(hours=1)
-    realised = _realised_hourly(session, target_name, lo, hi)
+    realised = realised_hourly(session, target_name, lo, hi)
 
     errors = [abs(y - realised[ts]) for ts, y in preds if ts >= lo and ts in realised.index]
     mae = float(sum(errors) / len(errors)) if errors else None

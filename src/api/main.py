@@ -14,7 +14,14 @@ from fastapi import Depends, FastAPI, HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, sessionmaker
 
-from src.api.schemas import BacktestPoint, Forecast, ForecastPoint, Health, ModelPerformance
+from src.api.schemas import (
+    BacktestPoint,
+    Forecast,
+    ForecastPoint,
+    Health,
+    HistoryPoint,
+    ModelPerformance,
+)
 from src.config import get_settings
 from src.db.engine import make_engine, make_session_factory
 from src.db.models import BacktestPrediction, Prediction
@@ -24,6 +31,7 @@ from src.monitoring.watchdog import (
     SourceFreshness,
     data_freshness,
     realised_error,
+    realised_hourly,
     recent_dq_events,
 )
 
@@ -83,6 +91,53 @@ def forecast(target_name: TargetName, session: SessionDep) -> Forecast:
         issued_at=rows[0].issued_at if rows else None,
         points=[ForecastPoint.model_validate(r) for r in rows],
     )
+
+
+@app.get("/history/{target_name}", response_model=list[HistoryPoint])
+def history(target_name: TargetName, session: SessionDep, days: int = 14) -> list[HistoryPoint]:
+    """Live emitted forecasts paired with realised outcomes, hour by hour.
+
+    The growing forecast-vs-actual record of the production system (as opposed to /backtest,
+    which is the simulated pre-launch history). y_true is null until the outcome is ingested —
+    consumption arrives intraday, day-ahead prices with the next morning's ingest. Excludes
+    late emissions (headline record only).
+    """
+    latest = session.execute(
+        select(func.max(Prediction.issue_date)).where(
+            Prediction.target_name == target_name, Prediction.late_issue.is_(False)
+        )
+    ).scalar_one_or_none()
+    if latest is None:
+        return []
+    cutoff = latest - dt.timedelta(days=days)
+    rows = (
+        session.execute(
+            select(Prediction)
+            .where(
+                Prediction.target_name == target_name,
+                Prediction.late_issue.is_(False),
+                Prediction.issue_date >= cutoff,
+            )
+            .order_by(Prediction.target_ts, Prediction.model_name, Prediction.quantile)
+        )
+        .scalars()
+        .all()
+    )
+    if not rows:
+        return []
+    lo = rows[0].target_ts
+    hi = rows[-1].target_ts + dt.timedelta(hours=1)
+    realised = realised_hourly(session, target_name, lo, hi)
+    return [
+        HistoryPoint(
+            target_ts=r.target_ts,
+            model_name=r.model_name,
+            quantile=r.quantile,
+            y_hat=r.y_hat,
+            y_true=float(realised[r.target_ts]) if r.target_ts in realised.index else None,
+        )
+        for r in rows
+    ]
 
 
 @app.get("/backtest/{target_name}", response_model=list[BacktestPoint])
