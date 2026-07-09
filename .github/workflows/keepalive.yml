@@ -1,0 +1,24 @@
+name: Keepalive
+
+on:
+  schedule:
+    # Every 12 minutes during waking hours (06-23 UTC): Render's free tier spins the API down
+    # after ~15 min idle and cold-starts in 30-60 s, which is a terrible first impression for a
+    # portfolio dashboard. A sub-15-min ping keeps it warm; overnight it sleeps (good citizen).
+    - cron: "*/12 6-22 * * *"
+  workflow_dispatch: {}
+
+concurrency:
+  group: keepalive
+  cancel-in-progress: true
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping API (and dashboard)
+        run: |
+          # --max-time 90 tolerates one cold start (the ping that pays it warms it for the rest).
+          curl -sf --max-time 90 https://energia-forecast-api.onrender.com/health
+          # Best-effort touch of the dashboard so Streamlit Cloud sees regular traffic too.
+          curl -s --max-time 60 -o /dev/null https://energia-forecast-bwwhirmyetaphmsk84dkqg.streamlit.app/ || true

@@ -3,8 +3,13 @@ name: Daily predict
 on:
   schedule:
     # 07:05 UTC — just after t_issue (07:00) and the 06:30 ingest, so the forecast is on-time
-    # and built on the freshest legal data.
+    # and built on the freshest legal data. GitHub's scheduler can delay cron events by hours
+    # (observed: +3h22 on 2026-07-09, which blew the 2h late-issue grace), so extra attempts
+    # act as retries: features are as-of 07:00 regardless of run time, and pred.predictions is
+    # insert-only, so the first attempt to land wins and later ones are no-ops.
     - cron: "5 7 * * *"
+    - cron: "50 7 * * *"
+    - cron: "35 8 * * *"
   workflow_dispatch: {}
 
 concurrency:

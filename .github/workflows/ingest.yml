@@ -4,7 +4,11 @@ on:
   schedule:
     # 06:30 UTC daily — after the ECMWF 00Z run is disseminated and before the 07:00 t_issue,
     # so the self-healing window captures the freshest legal data for that day's forecast.
+    # The second entry is a retry ticket against GitHub's scheduler delays (observed +3h30):
+    # ingestion is idempotent, so an extra run is harmless, and it refreshes the window for
+    # the predict workflow's own retry attempts.
     - cron: "30 6 * * *"
+    - cron: "45 7 * * *"
   workflow_dispatch: {}
 
 # Never run two ingests at once (they upsert the same rows); let the running one finish.
