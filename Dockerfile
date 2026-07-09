@@ -14,7 +14,7 @@ RUN uv sync --frozen --no-dev --no-install-project
 COPY src ./src
 RUN uv sync --frozen --no-dev
 
-# HF Spaces routes to 7860 by default; DATABASE_URL_RO is injected as a Space secret.
+# HF Spaces routes to 7860; Render injects its own $PORT (overriding this default). Both work.
 ENV PORT=7860
 EXPOSE 7860
-CMD uv run uvicorn src.api.main:app --host 0.0.0.0 --port ${PORT}
+CMD uv run --no-sync uvicorn src.api.main:app --host 0.0.0.0 --port ${PORT}
