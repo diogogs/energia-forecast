@@ -149,10 +149,11 @@ Ver `.env.example` — ENTSOE_API_TOKEN, DATABASE_URL (pooled), DATABASE_URL_DIR
 
 - [x] **Previsões persistidas + predict diário** ✅. Migração 0006: `pred.predictions` (insert-only, PK inclui `quantile`; `issued_at` nunca mutado) + `pred.backtest_predictions` (fold-wise, reescrevível). `src/models/predict.py`: retrain-on-emit (treino ~seg), emite consumo D+1 (LightGBM + 2 baselines, modelos de 1ª classe) → `pred.predictions` via `ON CONFLICT DO NOTHING`. `src/db/repositories/predictions.py`. **Validado ao vivo**: 72 linhas escritas, idempotência insert-only provada (re-emissão mantém a 1ª). Backtest persistido em `pred.backtest_predictions` (5112 linhas; MAE realizado na BD = 165/354/664, confere). `.github/workflows/predict.yml`: cron **07:05 UTC**. `make_consumption_model` partilhado backtest↔serving (sem skew). 100 testes verdes.
 
+- [x] **MLflow tracking + cron semanal de backtest** ✅. `src/models/tracking.py` (DagsHub se configurado, senão fallback local `./mlruns`; **nunca no serving**). `src/models/run_backtest.py`: backtest → persiste `pred.backtest_predictions` (durável no Neon) → regista params/métricas/feature-importance no MLflow. `.github/workflows/backtest.yml`: cron **domingos 05:00 UTC** (secrets MLflow opcionais → remoto; senão local efémero + persistência DB). Validado ao vivo (4104 linhas + run MLflow). **Falta config do utilizador:** criar repo DagsHub + `MLFLOW_TRACKING_URI/USERNAME/PASSWORD` no `.env` e GitHub Secrets para tracking remoto persistente. 100 testes verdes.
+
 ### A seguir (retomar aqui)
-- [ ] **MLflow (DagsHub)** — tracking de experiências (params, métricas do backtest, feature importance). Nunca no caminho de serving.
-- [ ] **Fase 2 (preço)** — reutilizar a fundação; features extra (previsão de consumo as-issued, lags de preço, ES, proxy renováveis), tripleto quantílico P10/P50/P90 (pinball loss + cobertura).
-- [ ] **Dashboard Streamlit + API FastAPI** (lê `pred.*`) + monitorização (erro realizado, drift, watchdog de frescura).
+- [ ] **Fase 2 (preço MIBEL)** — reutilizar a fundação; features extra (previsão de consumo as-issued, lags de preço {24,48,168h}, ES + spread, proxy renováveis vento³/radiação), tripleto quantílico **P10/P50/P90** (pinball loss + cobertura; MAE nunca MAPE).
+- [ ] **Dashboard Streamlit + API FastAPI** (lê `pred.*`) + monitorização (erro realizado, drift, `ops.dq_log`, watchdog de frescura).
 - [ ] **Camadas clean + features**, baselines, backtesting (Semanas 3-4).
 - [ ] **Ingestão diária automática** (critério de saída W2: 3+ dias sem intervenção).
 - [ ] Token ENTSO-E: aguardar aprovação (~3 dias úteis) — depois gerar em My Account Settings e adicionar a `.env`/Secrets (opcional, validação cruzada).
