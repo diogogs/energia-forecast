@@ -125,6 +125,29 @@ def main() -> None:
     with tab_p:
         _render_price(price_perf)
 
+    _render_status()
+
+
+def _render_status() -> None:
+    with st.expander("🩺 Estado do sistema — frescura dos dados e erro realizado"):
+        fresh = api("/monitoring/freshness")
+        assert isinstance(fresh, list)
+        df = pd.DataFrame(fresh)
+        if not df.empty:
+            df["frescura"] = df["stale"].map({True: "⚠️ stale", False: "✅ fresca"})
+            df["ingerido há (h)"] = df["hours_since_ingest"].round(1)
+            st.dataframe(
+                df[["source", "latest_data_ts", "ingerido há (h)", "frescura"]],
+                hide_index=True,
+                use_container_width=True,
+            )
+        cols = st.columns(2)
+        for col, target, unit in ((cols[0], "consumption", "MW"), (cols[1], "price", "€/MWh")):
+            err = api(f"/monitoring/error/{target}")
+            assert isinstance(err, dict)
+            value = f"{err['mae']:.1f} {unit}" if err.get("mae") is not None else "a acumular…"
+            col.metric(f"Erro live {target} ({err['hours_scored']}h)", value)
+
 
 def _mae_bars(perf: pd.DataFrame, unit: str) -> alt.Chart:
     return (

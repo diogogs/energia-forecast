@@ -2,13 +2,20 @@
 
 **Live day-ahead forecasting of Portuguese electricity demand and MIBEL prices — a zero-cost, always-on ML system.**
 
-> 🚧 Week 1 of an 8-week build. This README is treated as product documentation and will grow with the system. The architecture, decisions, and timeline live in [CLAUDE.md](CLAUDE.md) and [docs/decisions/](docs/decisions/).
+> Both targets are modelled and beat their baselines in a leakage-free rolling-origin backtest (consumption MAPE 2.77 %; price P50 MAE 13.24 €/MWh), emitted daily by GitHub Actions crons, and served through a read-only API + Streamlit dashboard. The architecture, decisions, and status live in [CLAUDE.md](CLAUDE.md) and [docs/decisions/](docs/decisions/).
 
 ## What this is
 
 - **Real data, ingested daily:** ENTSO-E Transparency Platform (load, generation, day-ahead prices for PT/ES), OMIE market files, Open-Meteo weather forecasts — validated, layered (`raw → clean → features`), idempotent.
 - **Forecasts issued *before* the market closes:** next-day hourly national consumption and MIBEL day-ahead prices (P10/P50/P90), issued daily before the 12:00 CET SDAC gate.
 - **Every prediction is persisted and scored against reality** — the forecast-vs-actual record is the product.
+
+## Serving & deployment
+
+The serving layer is stateless — all state lives in Neon — and split in two, per the charter:
+
+- **API** (`src/api`, FastAPI, read-only role): `/forecast/{consumption|price}`, `/backtest/{target}`, `/performance/{target}`, `/monitoring/freshness`, `/monitoring/error/{target}`. Run locally with `uv run uvicorn src.api.main:app`; deploy the root `Dockerfile` to a Hugging Face Spaces Docker Space (port 7860) with `DATABASE_URL_RO` as a Space secret.
+- **Dashboard** (`dashboard/app.py`, Streamlit): the latest D+1 forecasts (price with its P10–P90 CQR interval), each model's realised MAE vs baselines, and a data-freshness watchdog. Run with `uv run --group dashboard streamlit run dashboard/app.py`; deploy to Streamlit Community Cloud from `dashboard/requirements.txt` with `API_BASE_URL` pointing at the API.
 
 ## Engineering decisions
 

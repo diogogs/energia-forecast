@@ -18,6 +18,7 @@ from src.api.schemas import BacktestPoint, Forecast, ForecastPoint, Health, Mode
 from src.config import get_settings
 from src.db.engine import make_engine, make_session_factory
 from src.db.models import BacktestPrediction, Prediction
+from src.monitoring.watchdog import RealisedError, SourceFreshness, data_freshness, realised_error
 
 TargetName = Literal["consumption", "price"]
 
@@ -121,3 +122,15 @@ def performance(target_name: TargetName, session: SessionDep) -> list[ModelPerfo
         .order_by(func.avg(err))
     ).all()
     return [ModelPerformance(model_name=r.model_name, mae=float(r.mae), n=int(r.n)) for r in rows]
+
+
+@app.get("/monitoring/freshness", response_model=list[SourceFreshness])
+def freshness(session: SessionDep) -> list[SourceFreshness]:
+    """Per-source data freshness — the daily-ingest watchdog."""
+    return data_freshness(session)
+
+
+@app.get("/monitoring/error/{target_name}", response_model=RealisedError)
+def monitoring_error(target_name: TargetName, session: SessionDep, days: int = 14) -> RealisedError:
+    """MAE of the live emitted forecast vs realised outcomes over the last ``days``."""
+    return realised_error(session, target_name, days=days)
