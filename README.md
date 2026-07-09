@@ -2,6 +2,8 @@
 
 **Live day-ahead forecasting of Portuguese electricity demand and MIBEL prices — a zero-cost, always-on ML system.**
 
+🔴 **Live:** [dashboard](https://energia-forecast-bwwhirmyetaphmsk84dkqg.streamlit.app/) · [API](https://energia-forecast-api.onrender.com/docs) *(both free-tier; first hit may cold-start ~30–60 s)*
+
 > Both targets are modelled and beat their baselines in a leakage-free rolling-origin backtest (consumption MAPE 2.77 %; price P50 MAE 13.24 €/MWh), emitted daily by GitHub Actions crons, and served through a read-only API + Streamlit dashboard. The architecture, decisions, and status live in [CLAUDE.md](CLAUDE.md) and [docs/decisions/](docs/decisions/).
 
 ## What this is
