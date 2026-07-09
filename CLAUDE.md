@@ -111,7 +111,9 @@ Ver `.env.example` — ENTSOE_API_TOKEN, DATABASE_URL (pooled), DATABASE_URL_DIR
 
 ## Estado atual
 
-**Última atualização:** 2026-07-08 (fim do dia 2, Semana 1).
+**Última atualização:** 2026-07-09.
+
+**Estado global — sistema Fase-1 completo e autónomo, em produção.** As 4 fontes na camada `raw` (~1.85M linhas: OMIE 84k, REN 1.06M, Energy-Charts 353k, Open-Meteo 358k) → fundação temporal anti-leakage (`AsOfRepo`, publicação modelada, ADR-011) → `build_features` (calendário Lisboa, lags legais, meteo) → **LightGBM `regression_l1` que bate ambas as baselines** (backtest rolling-origin: MAE 166 MW / **MAPE 2.77%** vs sazonal 5.95%) → previsões em `pred.*` (insert-only). **Dois crons GitHub Actions a correr sozinhos:** `ingest` 06:30 UTC (self-healing) e `predict` 07:05 UTC (emite D+1), ambos validados ao vivo. Migrações **0001-0006**, ADRs **001-011**, **100 testes verdes** (marker `leakage` = gate), CI verde, custo zero (Neon 430/512 MB). **A seguir:** MLflow → Fase 2 (preço P10/P50/P90) → dashboard/monitorização.
 
 **Repositório:** código em `C:\dev\energia-forecast` (fora do OneDrive, ADR-005). GitHub: https://github.com/diogogs/energia-forecast (público, CI verde).
 
