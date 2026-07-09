@@ -35,9 +35,12 @@ jobs:
           # '-pooler' from the pooled URL (Neon's direct/pooled hosts differ only by that token).
           URL="${DATABASE_URL_DIRECT:-${DATABASE_URL/-pooler/}}"
           if [ -z "$URL" ]; then echo "No database URL configured (set DATABASE_URL)"; exit 1; fi
+          # ubuntu keeps pg_dump 16 on PATH even after installing client 18, and pg_dump refuses a
+          # newer server — call the 18 binary by its explicit path.
+          PG_DUMP=/usr/lib/postgresql/18/bin/pg_dump
           STAMP=$(date -u +%Y%m%d)
           OUT="energia-forecast-${STAMP}.sql.gz"
-          pg_dump "$URL" --no-owner --no-privileges --format=plain | gzip -9 > "$OUT"
+          "$PG_DUMP" "$URL" --no-owner --no-privileges --format=plain | gzip -9 > "$OUT"
           SIZE=$(stat -c%s "$OUT")
           echo "wrote ${OUT} (${SIZE} bytes)"
           # Guard against a silently-empty dump (e.g. an auth failure that still produced a file).
