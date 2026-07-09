@@ -5,6 +5,7 @@ from __future__ import annotations
 import datetime as dt
 import math
 
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -12,9 +13,21 @@ from src.models.price_model import (
     PRICE_FEATURE_COLS,
     QUANTILES,
     _pinball,
+    conformal_correction,
     make_price_quantile_model,
     rolling_origin_price_backtest,
 )
+
+
+def test_conformal_correction_widens_to_cover() -> None:
+    # 100 calibration points; the truth sits up to 10 outside the [lo, hi] band on one side.
+    y = np.array([5.0] * 100)
+    lo = np.array([0.0] * 100)
+    hi = np.array([4.0] * 100)  # truth (5) is 1 above hi -> nonconformity score +1 everywhere
+    q = conformal_correction(y, lo, hi, alpha=0.2)
+    assert q == pytest.approx(1.0)  # widening by 1 makes hi=5 exactly cover the truth
+    # A perfectly-covering interval needs no widening (scores negative).
+    assert conformal_correction(y, np.array([0.0] * 100), np.array([10.0] * 100), 0.2) <= 0.0
 
 
 def test_pinball_loss_is_asymmetric() -> None:

@@ -33,9 +33,8 @@ from src.models.backtest import (
 )
 from src.models.price_model import (
     PRICE_FEATURE_COLS,
-    QUANTILES,
     build_price_matrix,
-    make_price_quantile_model,
+    calibrated_price_triplet,
 )
 
 logger = logging.getLogger("predict")
@@ -146,18 +145,14 @@ def emit_price_forecast(
     matrix = build_price_matrix(repo, _train_issue_dates(issue_date)).dropna(
         subset=["y", "price_lag_24h", "price_lag_168h"]
     )
-    x_train = matrix[PRICE_FEATURE_COLS].astype("float64")
     features = build_price_features(repo, issue_date, zone)
     x = features[PRICE_FEATURE_COLS].astype("float64")
+    p10, p50, p90 = calibrated_price_triplet(matrix, x)
 
     rows: list[dict[str, object]] = []
-    for alpha in QUANTILES:
-        model = make_price_quantile_model(alpha)
-        model.fit(x_train, matrix["y"])
-        y_hat = pd.Series(model.predict(x), index=features.index)
-        rows += _rows_from_series(
-            y_hat, issue_date, "lightgbm", f"p{int(alpha * 100)}", "price", now, late
-        )
+    for quantile, values in (("p10", p10), ("p50", p50), ("p90", p90)):
+        y_hat = pd.Series(values, index=features.index)
+        rows += _rows_from_series(y_hat, issue_date, "lightgbm", quantile, "price", now, late)
     rows += _rows_from_series(
         baselines.persistence_price(features),
         issue_date,

@@ -20,6 +20,27 @@ from src.models.backtest import PreloadedRepo
 
 QUANTILES = (0.1, 0.5, 0.9)
 
+# Conformalised Quantile Regression (Romano et al. 2019) for the P10-P90 interval: the raw
+# quantile models under-cover, so we hold out the most recent CALIB_WEEKS of the training window,
+# measure how far the truth falls outside [P10, P90] there, and widen the interval by that
+# quantile. ALPHA=0.2 -> nominal 80% central interval. The P50 point forecast stays on the FULL
+# training window (unchanged MAE); only the interval uses the fit/calibration split.
+ALPHA = 0.2
+CALIB_WEEKS = 3
+
+
+def conformal_correction(
+    y_calib: np.ndarray, lo_calib: np.ndarray, hi_calib: np.ndarray, alpha: float = ALPHA
+) -> float:
+    """The CQR widening: the finite-sample (1-alpha) quantile of the interval nonconformity."""
+    scores = np.maximum(lo_calib - y_calib, y_calib - hi_calib)
+    n = len(scores)
+    if n == 0:
+        return 0.0
+    level = min(1.0, (1 - alpha) * (1 + 1 / n))
+    return float(np.quantile(scores, level, method="higher"))
+
+
 PRICE_FEATURE_COLS = [
     "hour",
     "dow",
@@ -49,8 +70,9 @@ def make_price_quantile_model(alpha: float) -> LGBMRegressor:
     """A LightGBM quantile regressor for quantile ``alpha`` (pinned config, shared everywhere).
 
     Deliberately shallow/regularised: deep trees overfit the median and collapse the P10-P90
-    interval (48% coverage). This config both lowers the P50 MAE and widens the interval to ~75%
-    empirical coverage (nominal 80%; the last few points want a conformal calibration — future).
+    interval (48% coverage). This config both lowers the P50 MAE and widens the base interval to
+    ~75%; conformal calibration (``calibrated_price_triplet``) then nudges it toward the nominal
+    80% (the residual gap is price-regime non-stationarity, which breaks CQR's exchangeability).
     """
     return LGBMRegressor(
         objective="quantile",
@@ -63,6 +85,36 @@ def make_price_quantile_model(alpha: float) -> LGBMRegressor:
         n_jobs=1,
         verbosity=-1,
     )
+
+
+def calibrated_price_triplet(
+    train: pd.DataFrame,
+    x_predict: pd.DataFrame,
+    calib_weeks: int = CALIB_WEEKS,
+    alpha: float = ALPHA,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Fit the P50 on the full window and a CQR-calibrated P10/P90; return (p10, p50, p90)."""
+    p50_model = make_price_quantile_model(0.5)
+    p50_model.fit(train[PRICE_FEATURE_COLS].astype("float64"), train["y"])
+    p50 = p50_model.predict(x_predict)
+
+    calib_start = train["issue_date"].max() - dt.timedelta(weeks=calib_weeks)
+    fit = train[train["issue_date"] < calib_start]
+    calib = train[train["issue_date"] >= calib_start]
+    if fit.empty:  # not enough history to hold out a calibration slice — skip calibration
+        fit, calib = train, train.iloc[:0]
+    lo_model = make_price_quantile_model(0.1)
+    hi_model = make_price_quantile_model(0.9)
+    lo_model.fit(fit[PRICE_FEATURE_COLS].astype("float64"), fit["y"])
+    hi_model.fit(fit[PRICE_FEATURE_COLS].astype("float64"), fit["y"])
+
+    q = 0.0
+    if not calib.empty:
+        x_calib = calib[PRICE_FEATURE_COLS].astype("float64")
+        q = conformal_correction(
+            calib["y"].to_numpy(), lo_model.predict(x_calib), hi_model.predict(x_calib), alpha
+        )
+    return lo_model.predict(x_predict) - q, p50, hi_model.predict(x_predict) + q
 
 
 def build_price_matrix(repo: PreloadedRepo, issue_dates: list[dt.date]) -> pd.DataFrame:
@@ -131,13 +183,10 @@ def rolling_origin_price_backtest(
         train = matrix[matrix["issue_date"] < week_start]
         test = matrix[(matrix["issue_date"] >= week_start) & (matrix["issue_date"] < week_end)]
         if not test.empty and len(train) > 500:
-            x_train = train[PRICE_FEATURE_COLS].astype("float64")
             x_test = test[PRICE_FEATURE_COLS].astype("float64")
+            p10, p50, p90 = calibrated_price_triplet(train, x_test)
             out = test.copy()
-            for alpha in QUANTILES:
-                model = make_price_quantile_model(alpha)
-                model.fit(x_train, train["y"])
-                out[f"p{int(alpha * 100)}"] = model.predict(x_test)
+            out["p10"], out["p50"], out["p90"] = p10, p50, p90
             predictions.append(out)
         week_start = week_end
 
