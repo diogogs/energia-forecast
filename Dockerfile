@@ -1,5 +1,5 @@
-# Read-only API image (Hugging Face Spaces Docker; fallback Render). The dashboard is a
-# separate Streamlit Community Cloud app that talks to this over HTTP.
+# Read-only API image — deployed as a Render web service (any Docker host works; $PORT-driven).
+# The dashboard is a separate Streamlit Community Cloud app that talks to this over HTTP.
 FROM python:3.12-slim
 
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
@@ -14,7 +14,7 @@ RUN uv sync --frozen --no-dev --no-install-project
 COPY src ./src
 RUN uv sync --frozen --no-dev
 
-# HF Spaces routes to 7860; Render injects its own $PORT (overriding this default). Both work.
+# Render injects its own $PORT (overriding this default); a fixed default keeps other hosts happy.
 ENV PORT=7860
 EXPOSE 7860
 CMD uv run --no-sync uvicorn src.api.main:app --host 0.0.0.0 --port ${PORT}

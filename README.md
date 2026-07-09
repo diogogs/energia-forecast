@@ -14,7 +14,7 @@
 
 The serving layer is stateless — all state lives in Neon — and split in two, per the charter:
 
-- **API** (`src/api`, FastAPI, read-only role): `/forecast/{consumption|price}`, `/backtest/{target}`, `/performance/{target}`, `/monitoring/freshness`, `/monitoring/error/{target}`. Run locally with `uv run uvicorn src.api.main:app`; deploy the root `Dockerfile` to a Hugging Face Spaces Docker Space (port 7860) with `DATABASE_URL_RO` as a Space secret.
+- **API** (`src/api`, FastAPI, read-only role): `/forecast/{consumption|price}`, `/backtest/{target}`, `/performance/{target}`, `/monitoring/freshness`, `/monitoring/error/{target}`. Run locally with `uv run uvicorn src.api.main:app`; deploy the root `Dockerfile` to a Render web service via the `render.yaml` blueprint (free tier), with `DATABASE_URL_RO` as the only env var (ADR-012 — HF Spaces Docker now requires PRO, so zero-cost serving moves to Render).
 - **Dashboard** (`dashboard/app.py`, Streamlit): the latest D+1 forecasts (price with its P10–P90 CQR interval), each model's realised MAE vs baselines, and a data-freshness watchdog. Run with `uv run --group dashboard streamlit run dashboard/app.py`; deploy to Streamlit Community Cloud from `dashboard/requirements.txt` with `API_BASE_URL` pointing at the API.
 
 ## Engineering decisions

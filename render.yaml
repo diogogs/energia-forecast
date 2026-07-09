@@ -1,0 +1,16 @@
+# Render Blueprint for the read-only API (charter's serving fallback; free Docker web service).
+# Create it via Render → New → Blueprint → this repo. Render builds the root Dockerfile, injects
+# its own $PORT (the Dockerfile honours it), and prompts once for DATABASE_URL_RO. Auto-deploys
+# on every push to main. Free plan spins down after ~15 min idle (a cold start on the next hit).
+services:
+  - type: web
+    name: energia-forecast-api
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    region: frankfurt
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: DATABASE_URL_RO
+        sync: false # set once in the Render dashboard (read-only Neon role)
