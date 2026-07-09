@@ -44,9 +44,11 @@ _LABEL = {
 }
 
 
+# Generous timeout: a free-tier Render API spins down after ~15 min idle and cold-starts in
+# 30-60 s, so the first request of a session must wait it out rather than error.
 @st.cache_data(ttl=300)
 def api(path: str) -> object:
-    return httpx.get(f"{API_BASE_URL}{path}", timeout=20).json()
+    return httpx.get(f"{API_BASE_URL}{path}", timeout=75).json()
 
 
 def _local(ts: pd.Series) -> pd.Series:
@@ -117,7 +119,10 @@ def main() -> None:
         cons_perf = perf_frame(api("/performance/consumption"))
         price_perf = perf_frame(api("/performance/price"))
     except httpx.HTTPError:
-        st.error(f"API indisponível em {API_BASE_URL}. Definir API_BASE_URL.")
+        st.warning(
+            f"A API ({API_BASE_URL}) pode estar a acordar (cold start ~30-60 s). "
+            "Atualiza a página dentro de um minuto."
+        )
         return
 
     assert isinstance(health, dict)
