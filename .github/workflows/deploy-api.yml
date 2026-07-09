@@ -1,0 +1,33 @@
+name: Deploy API
+
+on:
+  push:
+    branches: [main]
+    # Only files that end up in (or shape) the API image — dashboard/docs/test commits
+    # don't burn a Render build.
+    paths:
+      - "src/**"
+      - "Dockerfile"
+      - "pyproject.toml"
+      - "uv.lock"
+      - "render.yaml"
+  workflow_dispatch: {}
+
+concurrency:
+  group: deploy-api
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      # The service was created from a public repo URL (no GitHub App), so Render gets no
+      # push webhooks; its private Deploy Hook fills that gap (stored as a repo secret).
+      - name: Trigger Render deploy
+        run: |
+          set -euo pipefail
+          if [ -z "${{ secrets.RENDER_DEPLOY_HOOK }}" ]; then
+            echo "RENDER_DEPLOY_HOOK secret is not set"; exit 1
+          fi
+          response=$(curl -fsS "${{ secrets.RENDER_DEPLOY_HOOK }}")
+          echo "Render accepted the deploy request: ${response}"
