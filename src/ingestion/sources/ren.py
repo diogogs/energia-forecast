@@ -81,11 +81,17 @@ def to_ticks(day: dt.date) -> int:
     return int(delta.total_seconds()) * 10_000_000
 
 
-def parse_production_breakdown(payload: JsonObj, day: dt.date) -> list[RenObservation]:
+def parse_production_breakdown(
+    payload: JsonObj, day: dt.date, *, allow_partial: bool = False
+) -> list[RenObservation]:
     """Parse a ProductionBreakdown payload for ``day`` into DST-correct observations.
 
     Null slots (not-yet-published / non-existent series) are skipped, so a row exists iff
     REN published a realised value for that (series, slot).
+
+    ``allow_partial`` accepts a payload with *fewer* slots than the civil day — the normal shape
+    of the current in-progress day (REN truncates the array rather than padding with nulls). It
+    is meant only for that trailing day; historical days stay strict so a genuine gap still fails.
     """
     series = payload.get("series")
     if not isinstance(series, list) or not series:
@@ -119,7 +125,11 @@ def parse_production_breakdown(payload: JsonObj, day: dt.date) -> list[RenObserv
         dt.UTC
     )
     expected_slots = int((end_utc - start_utc) / step)
-    if n_slots != expected_slots:
+    # A count > expected would emit timestamps that spill past midnight and collide with the next
+    # day's rows on upsert — always rejected. A count < expected is a genuine gap on a completed
+    # day (reject) but the normal shape of the current in-progress day (accept its prefix when
+    # allow_partial): those slots are a contiguous run from midnight and stay within the day.
+    if n_slots > expected_slots or (n_slots != expected_slots and not allow_partial):
         raise RenParseError(
             f"slot count {n_slots} does not match the {expected_slots}-slot Lisbon day {day}"
         )

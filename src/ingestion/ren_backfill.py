@@ -19,7 +19,11 @@ import httpx
 
 from src.db.engine import make_engine, make_session_factory
 from src.db.repositories.ren import upsert_ren_observations
-from src.ingestion.sources.ren import fetch_production_breakdown, parse_production_breakdown
+from src.ingestion.sources.ren import (
+    LISBON,
+    fetch_production_breakdown,
+    parse_production_breakdown,
+)
 
 logger = logging.getLogger("ren_backfill")
 
@@ -44,6 +48,10 @@ def backfill_ren(
     owns_client = client is None
     client = client or httpx.Client()
     stats = {"days_ingested": 0, "days_missing": 0, "days_failed": 0, "rows": 0}
+    # The current Lisbon day is still in progress: REN returns a truncated (partial) array for it,
+    # which is expected, not a fault. Accept its prefix so today's data lands and the daily run
+    # doesn't report a spurious failure; tomorrow's idempotent re-ingest completes it.
+    lisbon_today = dt.datetime.now(tz=LISBON).date()
 
     try:
         day = start
@@ -53,7 +61,9 @@ def backfill_ren(
             try:
                 response = fetch_production_breakdown(day, client)
                 observations = (
-                    parse_production_breakdown(response.payload, day)
+                    parse_production_breakdown(
+                        response.payload, day, allow_partial=day >= lisbon_today
+                    )
                     if response is not None
                     else []
                 )

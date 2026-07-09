@@ -145,6 +145,27 @@ def test_slot_count_must_match_the_days_civil_length() -> None:
         parse_production_breakdown(payload, dt.date(2024, 3, 31))
 
 
+def test_partial_current_day_accepted_only_when_allowed() -> None:
+    # The in-progress day: REN truncates the array (68 of 96 slots). Strict parsing rejects it;
+    # allow_partial accepts the contiguous prefix — those instants stay within the day.
+    payload = {"series": [{"name": "Consumption", "data": [1.0] * 68}]}
+    with pytest.raises(RenParseError, match="does not match"):
+        parse_production_breakdown(payload, dt.date(2024, 6, 15))
+
+    obs = parse_production_breakdown(payload, dt.date(2024, 6, 15), allow_partial=True)
+    assert len(obs) == 68
+    assert obs[-1].period == 68  # last slot; never spills past the day
+    assert obs[-1].local_date == dt.date(2024, 6, 15)
+
+
+def test_partial_never_relaxes_the_spill_case() -> None:
+    # allow_partial must NOT accept MORE slots than the day holds — the dangerous spill-into-
+    # next-day case (96 on a 92-slot day) is always rejected, partial or not.
+    payload = {"series": [{"name": "Consumption", "data": [1.0] * 96}]}
+    with pytest.raises(RenParseError, match="does not match"):
+        parse_production_breakdown(payload, dt.date(2024, 3, 31), allow_partial=True)
+
+
 def test_to_ticks_matches_dotnet_midnight() -> None:
     # Cross-checked against the live site's dayToSearchString for a midnight day.
     assert to_ticks(dt.date(2024, 6, 1)) == 638_527_968_000_000_000
