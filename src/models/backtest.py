@@ -19,7 +19,7 @@ from lightgbm import LGBMRegressor
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from src.db.models import OpenMeteoForecast, RenRealised
+from src.db.models import OmiePrice, OpenMeteoForecast, RenRealised
 from src.features import temporal
 from src.features.asof_repo import CONSUMPTION_SERIES
 from src.features.build_features import build_consumption_features
@@ -93,6 +93,21 @@ class PreloadedRepo:
             for lead, part in avg.groupby("lead_days")
         }
 
+        price_rows = session.execute(
+            select(OmiePrice.zone, OmiePrice.ts_utc, OmiePrice.price_eur_mwh)
+        ).all()
+        pdf = pd.DataFrame(price_rows, columns=["zone", "ts_utc", "price"])
+        self._price: dict[str, pd.Series] = {}
+        self._price_pub: dict[str, pd.DatetimeIndex] = {}
+        for zone, part in pdf.groupby("zone"):
+            hourly = to_hourly(list(zip(part["ts_utc"], part["price"], strict=True)))
+            self._price[str(zone)] = hourly
+            # A price's publication time is set by its CET market day (= the hour's CET date).
+            market_dates = [ts.tz_convert(temporal.CET).date() for ts in hourly.index]
+            self._price_pub[str(zone)] = pd.to_datetime(
+                [temporal.omie_published_at(d) for d in market_dates], utc=True
+            )
+
     def hourly_consumption(self, t_issue: dt.datetime) -> pd.Series:
         return self._cons[self._cons_pub <= pd.Timestamp(t_issue)]
 
@@ -111,6 +126,18 @@ class PreloadedRepo:
     def realised_consumption(self, delivery_date_cet: dt.date) -> pd.Series:
         hours = temporal.delivery_hours_utc(delivery_date_cet)
         return self._cons.reindex(pd.DatetimeIndex(hours))
+
+    def hourly_price(self, zone: str, t_issue: dt.datetime) -> pd.Series:
+        prices = self._price.get(zone)
+        pub = self._price_pub.get(zone)
+        if prices is None or pub is None:
+            return pd.Series(dtype="float64")
+        return prices[pub <= pd.Timestamp(t_issue)]
+
+    def realised_price(self, delivery_date_cet: dt.date, zone: str = "PT") -> pd.Series:
+        hours = temporal.delivery_hours_utc(delivery_date_cet)
+        prices = self._price.get(zone, pd.Series(dtype="float64"))
+        return prices.reindex(pd.DatetimeIndex(hours))
 
 
 def build_matrix(repo: PreloadedRepo, issue_dates: list[dt.date]) -> pd.DataFrame:
