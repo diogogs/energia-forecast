@@ -1,4 +1,4 @@
-"""Performance page — the receipts: simulated history, MAE vs baselines, interval coverage."""
+"""Performance page — backtest history, MAE vs baselines, interval coverage."""
 
 from __future__ import annotations
 
@@ -15,12 +15,12 @@ from common import (
     perf_frame,
 )
 
-st.title("📈 Performance — the receipts")
+st.title("Forecast performance")
 st.markdown(
-    "Ten weeks of **simulated history**. For every day shown, the model was retrained using "
-    "only data *published before that morning's 07:00 UTC cutoff*, then predicted the next day "
-    "— a **rolling-origin backtest** with weekly refresh. No hindsight, no leakage; no chart on "
-    "this page ever re-predicts the past with a newer model."
+    "All history on this page comes from a rolling-origin backtest: for each day shown, the "
+    "model was trained only on data published before that morning's 07:00 UTC cutoff, then "
+    "predicted the following day. Past predictions are stored and never regenerated with a "
+    "newer model."
 )
 
 TARGETS = {
@@ -68,8 +68,8 @@ else:
         width="stretch",
     )
     st.caption(
-        f"Each point is a real fold: forecast issued at 07:00 UTC the previous day, "
-        f"scored against the outcome. Window: last {days} days of the backtest."
+        f"Each point is a backtest fold: forecast issued at 07:00 UTC the previous day, "
+        f"scored against the outcome. Showing the last {days} days."
     )
 
     # ---------------------------------------------------------------- interval coverage (price)
@@ -82,13 +82,13 @@ else:
             c1, c2 = st.columns([1, 2])
             c1.metric("P10-P90 empirical coverage", f"{inside.mean():.0%}", "target: 80%")
             c2.caption(
-                "The interval is conformally calibrated (CQR) on a trailing window. Honest "
-                "residual: coverage sits below the 80% target because price regimes shift "
-                "faster than the calibration window — documented, not hidden."
+                "The interval is conformally calibrated (CQR) on a trailing window. Coverage "
+                "sits below the 80% target because price regimes shift faster than the "
+                "calibration window; see the known limitations on the Methodology page."
             )
 
 # ---------------------------------------------------------------- MAE vs baselines
-st.subheader("Model vs naive baselines — whole backtest")
+st.subheader("Error vs baselines (full backtest)")
 perf = perf_frame(api_or_none(f"/performance/{target}"))
 if not perf.empty:
     headline = perf[
@@ -99,9 +99,10 @@ if not perf.empty:
     base = perf.loc[~perf.model_name.str.contains("lightgbm"), "mae"]
     if not base.empty:
         st.markdown(
-            f"Over all 71 held-out days the model's MAE is **{model_mae:,.1f} {unit}** — "
-            f"**{1 - model_mae / float(base.min()):.0%} lower** than the best naive baseline "
-            f"({float(base.min()):,.1f}). A model that can't beat these rules doesn't ship."
+            f"Over all 71 held-out days the model's MAE is **{model_mae:,.1f} {unit}**, "
+            f"{1 - model_mae / float(base.min()):.0%} lower than the best naive baseline "
+            f"({float(base.min()):,.1f}). Models are only published when they outperform "
+            "both baselines on the same folds."
         )
 
 footer()

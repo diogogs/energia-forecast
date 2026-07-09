@@ -179,12 +179,10 @@ def mae_bars(perf: pd.DataFrame, unit: str) -> alt.Chart:
 
 
 def footer() -> None:
-    """Attribution (CC BY licence requirement) + the portfolio links, on every page."""
+    """Attribution (CC BY licence requirement) + project links, on every page."""
     st.divider()
     st.caption(
-        f"Open source — [code, tests & ADRs on GitHub]({GITHUB_URL}) · "
-        f"[API docs]({API_BASE_URL}/docs) · zero-cost stack (GitHub Actions + Neon + Render + "
-        "Streamlit Cloud)  \n"
+        f"[Source code]({GITHUB_URL}) · [API documentation]({API_BASE_URL}/docs)  \n"
         "Weather data by [Open-Meteo.com](https://open-meteo.com/) (CC BY 4.0) · "
         "Spanish power data by [Energy-Charts / Fraunhofer ISE](https://www.energy-charts.info/) "
         "(CC BY 4.0) · Portuguese system data from the "

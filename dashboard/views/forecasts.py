@@ -20,11 +20,11 @@ from common import (
     price_band,
 )
 
-st.title("⚡ Energy Forecast — Portugal")
+st.title("Day-ahead forecasts")
 st.markdown(
-    "Every morning at **07:05 UTC** this system forecasts the next day's Portuguese "
-    "**electricity demand** and **MIBEL wholesale price** — *before* the day-ahead market "
-    "closes — and then scores itself against reality, in public."
+    "Hourly forecasts of Portuguese electricity demand and the MIBEL day-ahead price for "
+    "tomorrow's market day, issued each morning at 07:05 UTC, before the 12:00 CET auction. "
+    "Every forecast is recorded at issue time and scored against the observed outcome."
 )
 
 health = api_or_none("/health")
@@ -69,8 +69,8 @@ if not cons_pts.empty and isinstance(cons, dict):
     market_day = dt.date.fromisoformat(cons["issue_date"]) + dt.timedelta(days=1)
     peak = cons_pts.loc[cons_pts.y_hat.idxmax()]
     headline = (
-        f"### {market_day:%A, %d %B} — peak demand **{peak.y_hat / 1000:.1f} GW** "
-        f"around **{peak.hour:%H:%M}**"
+        f"#### {market_day:%A, %d %B}: peak demand **{peak.y_hat / 1000:.1f} GW** "
+        f"around {peak.hour:%H:%M}"
     )
     if not price_pts.empty:
         p50 = price_pts.y_hat.mean()
@@ -84,10 +84,10 @@ if not cons_pts.empty and isinstance(cons, dict):
             headline += f", average price **{p50:.0f} €/MWh**"
     st.markdown(headline)
     issued = pd.to_datetime(cons.get("issued_at")) if cons.get("issued_at") else None
-    when = f"today at {issued:%H:%M} UTC" if issued is not None else "this morning"
+    when = f"at {issued:%H:%M} UTC" if issued is not None else "this morning"
     st.caption(
-        f"Issued {when}, hours before the 12:00 CET day-ahead auction closes. "
-        "Forecasts are **write-once**: recorded with their issue timestamp and never revised."
+        f"Issued {when}, before the 12:00 CET day-ahead auction. Forecasts are stored with "
+        "their issue timestamp and never revised."
     )
 
 # ---------------------------------------------------------------- today vs actual
@@ -106,7 +106,7 @@ def _today_vs_actual(target: str, y_title: str) -> None:
     today = pd.Timestamp.now(tz=LISBON).date()
     df = df[df.hour.dt.date == today]
     if df.empty:
-        st.caption("No forecast covers today yet — this fills in from tomorrow morning on.")
+        st.caption("No forecast covers today yet; the record fills in from tomorrow morning.")
         return
     lines = pd.concat(
         [
@@ -121,18 +121,18 @@ def _today_vs_actual(target: str, y_title: str) -> None:
         scored = df.dropna(subset=["y_true"])
         mae = (scored.y_hat - scored.y_true).abs().mean()
         st.caption(
-            f"Yesterday's forecast for today, scored live: **MAE {mae:.0f}** over "
-            f"{len(scored)} h so far. Actuals keep arriving through the day."
+            f"Yesterday's forecast for today, scored live: MAE {mae:.0f} over "
+            f"{len(scored)} h so far. Actuals continue to arrive through the day."
         )
     else:
         st.caption("Actuals for today arrive with the next data ingest.")
 
 
 # ---------------------------------------------------------------- tabs
-tab_demand, tab_price = st.tabs(["🔌 Demand (D+1)", "💶 MIBEL price (D+1)"])
+tab_demand, tab_price = st.tabs(["Demand (D+1)", "MIBEL price (D+1)"])
 
 with tab_demand:
-    st.subheader("Tomorrow, hour by hour")
+    st.subheader("Hourly forecast for tomorrow")
     if isinstance(cons, dict) and "points" in cons:
         lines = forecast_lines(cons["points"], LABEL)
         if not lines.empty:
@@ -142,15 +142,15 @@ with tab_demand:
         c1, c2 = st.columns([1, 2])
         c1.metric("Backtest MAE (10 weeks)", f"{delta[0]:.0f} MW", delta[1], delta_color="inverse")
         c2.caption(
-            "Mean absolute error over 71 held-out days (rolling-origin backtest — see "
-            "**Performance**). The model roughly halves the error of the strongest naive "
-            "baseline; MAPE ≈ 2.8%."
+            "Mean absolute error over 71 held-out days (rolling-origin backtest, see the "
+            "Performance page). The model roughly halves the error of the strongest naive "
+            "baseline; MAPE is about 2.8%."
         )
-    st.subheader("Today: forecast vs what actually happened")
+    st.subheader("Today: forecast vs actuals")
     _today_vs_actual("consumption", "Demand (MW)")
 
 with tab_price:
-    st.subheader("Tomorrow, hour by hour — with a calibrated 80% interval")
+    st.subheader("Hourly forecast for tomorrow")
     if isinstance(price, dict) and "points" in price:
         lines = forecast_lines(price["points"], LABEL)
         band = price_band(price["points"])
@@ -165,8 +165,8 @@ with tab_price:
                 chart = area + chart
             st.altair_chart(chart, width="stretch")
             st.caption(
-                "Shaded band = P10-P90 interval, conformally calibrated (CQR). The point "
-                "forecast is the P50 of a quantile-regression triplet."
+                "The shaded band is the P10-P90 interval, conformally calibrated (CQR). "
+                "The point forecast is the P50 of a quantile-regression triplet."
             )
     delta = _mae_delta(price_perf, "lightgbm_p50")
     if delta:
@@ -175,22 +175,21 @@ with tab_price:
             "Backtest P50 MAE (10 weeks)", f"{delta[0]:.2f} €/MWh", delta[1], delta_color="inverse"
         )
         c2.caption(
-            "Prices are far noisier than demand — negative prices, renewables-driven spikes, "
-            "regime shifts. Beating persistence at all is the meaningful bar here."
+            "Prices are considerably noisier than demand: negative prices, renewables-driven "
+            "spikes, regime shifts. Beating persistence is the meaningful bar here."
         )
     st.subheader("Today: forecast vs cleared prices")
     _today_vs_actual("price", "Price (€/MWh)")
 
-with st.expander("What are the baselines — and why do they matter?"):
+with st.expander("About the baselines"):
     st.markdown(
-        "- **Persistence** — tomorrow repeats the most recent *legally usable* day: demand at "
-        "the same hour **48 h earlier** (today is still incomplete when we issue at 07:00 UTC), "
-        "price **24 h earlier** (day-ahead prices are published the day before).\n"
-        "- **Weekly seasonal** — tomorrow repeats the same hour **one week earlier**, capturing "
-        "the weekly rhythm.\n\n"
-        "These naive rules are surprisingly strong in power systems. **A model is only "
-        "published if it beats both on exactly the same days** — otherwise the dashboard would "
-        "show the baseline, labelled as such."
+        "- **Persistence**: tomorrow repeats the most recent legally usable day — demand at "
+        "the same hour 48 h earlier (the current day is still incomplete at the 07:00 UTC "
+        "issue time), price 24 h earlier (day-ahead prices are published the day before).\n"
+        "- **Weekly seasonal**: tomorrow repeats the same hour one week earlier.\n\n"
+        "These naive rules are strong benchmarks in power systems. A model is only published "
+        "if it beats both on the same folds; otherwise the dashboard would show the baseline, "
+        "labelled as such."
     )
 
 footer()
