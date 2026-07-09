@@ -10,7 +10,7 @@ import pandas as pd
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from src.db.models import RenRealised
+from src.db.models import OmiePrice, RenRealised
 from src.features import temporal
 from src.features.asof_repo import CONSUMPTION_SERIES
 from src.features.hourly import to_hourly
@@ -28,4 +28,22 @@ def consumption_target(session: Session, delivery_date_cet: dt.date) -> pd.Serie
         RenRealised.ts_utc < hours[-1] + dt.timedelta(hours=1),
     )
     pairs = [(ts, value) for ts, value in session.execute(stmt).all()]
+    return to_hourly(pairs)
+
+
+def price_target(
+    session: Session, delivery_date_cet: dt.date, zone: str = "PT"
+) -> pd.Series[float]:
+    """Day-ahead MIBEL price (EUR/MWh), hourly-mean UTC, over the CET market day.
+
+    This is the Phase-2 label — the eventual day-ahead price, forecast at 07:00 before the SDAC
+    close. Hourly mean of the native 15-min/hourly prices (ADR-002).
+    """
+    hours = temporal.delivery_hours_utc(delivery_date_cet)
+    stmt = select(OmiePrice.ts_utc, OmiePrice.price_eur_mwh).where(
+        OmiePrice.zone == zone,
+        OmiePrice.ts_utc >= hours[0],
+        OmiePrice.ts_utc < hours[-1] + dt.timedelta(hours=1),
+    )
+    pairs = [(ts, price) for ts, price in session.execute(stmt).all()]
     return to_hourly(pairs)

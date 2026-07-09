@@ -29,6 +29,16 @@ class FeatureRepo(Protocol):
     ) -> pd.DataFrame: ...
 
 
+class PriceRepo(Protocol):
+    """The as-of read surface build_price_features depends on."""
+
+    def hourly_price(self, zone: str, t_issue: dt.datetime) -> pd.Series[float]: ...
+
+    def weather_forecast(
+        self, t_issue: dt.datetime, target_hours: list[dt.datetime]
+    ) -> pd.DataFrame: ...
+
+
 # Legal consumption lags relative to the target hour (hours). 24h is deliberately excluded.
 CONSUMPTION_LAGS_H = (48, 72, 168, 336)
 
@@ -87,6 +97,54 @@ def build_consumption_features(repo: FeatureRepo, issue_date: dt.date) -> pd.Dat
         for lag_h in CONSUMPTION_LAGS_H:
             key = pd.Timestamp(target_ts - dt.timedelta(hours=lag_h))
             row[f"cons_lag_{lag_h}h"] = float(legal_consumption.get(key, float("nan")))
+        rows.append(row)
+
+    features = pd.DataFrame(rows).set_index("target_ts")
+    weather = repo.weather_forecast(t_issue, delivery_hours)
+    return _add_weather_features(features, weather)
+
+
+# Legal price lags relative to the target hour. 24h is legal here (day-D prices were published
+# on D-1, unlike consumption where the same-day value is still incomplete).
+PRICE_LAGS_H = (24, 48, 168)
+
+
+def build_price_features(repo: PriceRepo, issue_date: dt.date, zone: str = "PT") -> pd.DataFrame:
+    """Feature matrix (index = delivery-hour ts_utc) for the MIBEL price forecast issued on D."""
+    t_issue = temporal.t_issue_for(issue_date)
+    delivery_hours = temporal.delivery_hours_utc(temporal.delivery_date_for(issue_date))
+    price = repo.hourly_price(zone, t_issue)
+    price_es = repo.hourly_price("ES", t_issue)
+
+    # Day-D price aggregates — the issue day's own prices (all published on D-1, so legal).
+    day_d = price.reindex(pd.DatetimeIndex(temporal.delivery_hours_utc(issue_date))).dropna()
+    day_d_stats = {
+        "day_d_price_mean": float(day_d.mean()) if not day_d.empty else float("nan"),
+        "day_d_price_min": float(day_d.min()) if not day_d.empty else float("nan"),
+        "day_d_price_max": float(day_d.max()) if not day_d.empty else float("nan"),
+        "day_d_price_std": float(day_d.std()) if len(day_d) > 1 else float("nan"),
+    }
+
+    rows: list[dict[str, object]] = []
+    for target_ts in delivery_hours:
+        local = target_ts.astimezone(temporal.LISBON)
+        lag24 = pd.Timestamp(target_ts - dt.timedelta(hours=24))
+        pt_24 = float(price.get(lag24, float("nan")))
+        es_24 = float(price_es.get(lag24, float("nan")))
+        row: dict[str, object] = {
+            "target_ts": target_ts,
+            "hour": local.hour,
+            "dow": local.weekday(),
+            "month": local.month,
+            "is_weekend": local.weekday() >= 5,
+            "is_holiday": bool(local.date() in _PT_HOLIDAYS),
+            "es_lag_24h": es_24,
+            "spread_lag_24h": pt_24 - es_24,
+            **day_d_stats,
+        }
+        for lag_h in PRICE_LAGS_H:
+            key = pd.Timestamp(target_ts - dt.timedelta(hours=lag_h))
+            row[f"price_lag_{lag_h}h"] = float(price.get(key, float("nan")))
         rows.append(row)
 
     features = pd.DataFrame(rows).set_index("target_ts")

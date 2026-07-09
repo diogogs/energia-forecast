@@ -23,3 +23,17 @@ def persistence_consumption(features: pd.DataFrame) -> pd.Series:
 def seasonal_weekly_consumption(features: pd.DataFrame) -> pd.Series:
     """Predict each delivery hour as consumption 168h (one week) earlier."""
     return features[f"cons_lag_{SEASONAL_WEEKLY_LAG_H}h"].rename("y_hat")
+
+
+# Price persistence: the day-ahead price repeats yesterday's same hour (24h — legal for price).
+PRICE_PERSISTENCE_LAG_H = 24
+
+
+def persistence_price(features: pd.DataFrame) -> pd.Series:
+    """Predict each delivery hour as the price 24h earlier (day-D price, published D-1)."""
+    return features[f"price_lag_{PRICE_PERSISTENCE_LAG_H}h"].rename("y_hat")
+
+
+def seasonal_weekly_price(features: pd.DataFrame) -> pd.Series:
+    """Predict each delivery hour as the price 168h (one week) earlier."""
+    return features[f"price_lag_{SEASONAL_WEEKLY_LAG_H}h"].rename("y_hat")
