@@ -165,9 +165,10 @@ def _render_status() -> None:
             value = f"{err['mae']:.1f} {unit}" if err.get("mae") is not None else "a acumular…"
             col.metric(f"Erro live {target} ({err['hours_scored']}h)", value)
 
+        # Tolerate version skew: /monitoring/dq is newer than /freshness, so a not-yet-redeployed
+        # API returns a 404 dict here — skip the panel rather than break the whole status expander.
         events = api("/monitoring/dq?limit=8")
-        assert isinstance(events, list)
-        if events:
+        if isinstance(events, list) and events:
             st.caption("Últimas execuções da ingestão diária (ops.dq_log)")
             ev = pd.DataFrame(events)
             ev["quando"] = _local(ev["logged_at"]).dt.strftime("%Y-%m-%d %H:%M")
