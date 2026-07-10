@@ -173,6 +173,6 @@ Ver `.env.example` — ENTSOE_API_TOKEN, DATABASE_URL (pooled), DATABASE_URL_DIR
 ### A seguir (retomar aqui)
 - [ ] **Amanhã (07-11): 1ª emissão pontual de sempre** — cron-job.org dispara 06:30/07:05 UTC → `late_issue=False` → painel "Today: forecast vs actuals" começa a encher. Daí em diante: 3 dias de autonomia pontual = critério W2 cumprido.
 - [ ] **Hardening restante** — drift, ENTSO-E cross-validation (opcional), config DagsHub para MLflow remoto.
-- [ ] **Write-up do projeto** (`docs/posts/`) — o multiplicador de portfólio; fazer quando houver ~1 semana de track record live.
+- [x] **Write-up publicado** ✅ (2026-07-10): "The model was the easy part" — draft do Claude, editado e validado pelo autor; live em diogogs.github.io/posts/the-model-was-the-easy-part/ + cópia canónica em `docs/posts/`. Divulgação (LinkedIn) fica para a fase final do plano de carreira.
 - [ ] **Dashboard P2** (backlog): navegação temporal (arquivo de previsões), evolução do erro live, feature importance, bilingue.
 - [ ] **Contexto paralelo:** site pessoal de portfólio em construção em `C:\dev\diogogs.github.io` (Astro + GitHub Pages; decisões e perfil na memória do Claude) — o write-up deste projeto será a peça fundadora do site.
