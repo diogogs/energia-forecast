@@ -14,6 +14,7 @@ from common import (
     cold_start_stop,
     footer,
     forecast_lines,
+    hero_card,
     line_chart,
     local,
     perf_frame,
@@ -68,26 +69,23 @@ cons_pts, price_pts = _model_points(cons), _model_points(price)
 if not cons_pts.empty and isinstance(cons, dict):
     market_day = dt.date.fromisoformat(cons["issue_date"]) + dt.timedelta(days=1)
     peak = cons_pts.loc[cons_pts.y_hat.idxmax()]
-    headline = (
-        f"#### {market_day:%A, %d %B}: peak demand **{peak.y_hat / 1000:.1f} GW** "
-        f"around {peak.hour:%H:%M}"
-    )
+    headline = f"Peak demand <b>{peak.y_hat / 1000:.1f} GW</b> around {peak.hour:%H:%M}"
     if not price_pts.empty:
         p50 = price_pts.y_hat.mean()
         band = price_band(price["points"]) if isinstance(price, dict) else pd.DataFrame()
+        headline += f" &nbsp;·&nbsp; average price <b>{p50:.0f} €/MWh</b>"
         if not band.empty:
             headline += (
-                f", average price **{p50:.0f} €/MWh** "
-                f"(80% interval {band.p10.mean():.0f}-{band.p90.mean():.0f})"
+                f' <span style="opacity:.75">(80% interval '
+                f"{band.p10.mean():.0f}-{band.p90.mean():.0f})</span>"
             )
-        else:
-            headline += f", average price **{p50:.0f} €/MWh**"
-    st.markdown(headline)
     issued = pd.to_datetime(cons.get("issued_at")) if cons.get("issued_at") else None
     when = f"at {issued:%H:%M} UTC" if issued is not None else "this morning"
-    st.caption(
-        f"Issued {when}, before the 12:00 CET day-ahead auction. Forecasts are stored with "
-        "their issue timestamp and never revised."
+    hero_card(
+        f"Tomorrow · {market_day:%A, %d %B}",
+        headline,
+        f"Issued {when}, before the 12:00 CET day-ahead auction. Forecasts are stored "
+        "with their issue timestamp and never revised.",
     )
 
 # ---------------------------------------------------------------- today vs actual
@@ -116,7 +114,8 @@ def _today_vs_actual(target: str, y_title: str) -> None:
             ],
         ]
     )
-    st.altair_chart(line_chart(lines, y_title, height=300), width="stretch")
+    with st.container(border=True):
+        st.altair_chart(line_chart(lines, y_title, height=300), width="stretch")
     if df.y_true.notna().any():
         scored = df.dropna(subset=["y_true"])
         mae = (scored.y_hat - scored.y_true).abs().mean()
@@ -136,7 +135,8 @@ with tab_demand:
     if isinstance(cons, dict) and "points" in cons:
         lines = forecast_lines(cons["points"], LABEL)
         if not lines.empty:
-            st.altair_chart(line_chart(lines, "Demand (MW)"), width="stretch")
+            with st.container(border=True):
+                st.altair_chart(line_chart(lines, "Demand (MW)"), width="stretch")
     delta = _mae_delta(cons_perf, "lightgbm")
     if delta:
         c1, c2 = st.columns([1, 2])
@@ -163,7 +163,8 @@ with tab_price:
                     .encode(x="hour:T", y="p10:Q", y2="p90:Q")
                 )
                 chart = area + chart
-            st.altair_chart(chart, width="stretch")
+            with st.container(border=True):
+                st.altair_chart(chart, width="stretch")
             st.caption(
                 "The shaded band is the P10-P90 interval, conformally calibrated (CQR). "
                 "The point forecast is the P50 of a quantile-regression triplet."

@@ -8,7 +8,7 @@ Design register is deliberately sober: Material icons (no emoji), plain titles, 
 from __future__ import annotations
 
 import streamlit as st
-from common import API_BASE_URL, GITHUB_URL
+from common import API_BASE_URL, BRAND_CSS, GITHUB_URL
 
 st.set_page_config(
     page_title="Energia Forecast",
@@ -16,6 +16,7 @@ st.set_page_config(
     layout="wide",
     menu_items={"Get help": GITHUB_URL},
 )
+st.markdown(BRAND_CSS, unsafe_allow_html=True)
 
 nav = st.navigation(
     [

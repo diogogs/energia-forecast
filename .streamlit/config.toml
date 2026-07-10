@@ -1,0 +1,8 @@
+# Streamlit theme — the project's navy/blue identity (shared with the CV and personal site).
+# base is pinned to light: the chart palette is validated against a light surface.
+[theme]
+base = "light"
+primaryColor = "#2a5a8c"
+backgroundColor = "#ffffff"
+secondaryBackgroundColor = "#f3f6f9"
+textColor = "#1e2a38"

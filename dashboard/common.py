@@ -18,6 +18,94 @@ import streamlit as st
 GITHUB_URL = "https://github.com/diogogs/energia-forecast"
 LISBON = "Europe/Lisbon"
 
+# Injected once from app.py. Navy sidebar and hero echo the print CV and the personal site;
+# metrics become cards; Streamlit chrome recedes. Selectors use stable data-testid hooks.
+BRAND_CSS = """
+<style>
+/* layout */
+.block-container { padding-top: 2.4rem; max-width: 62rem; }
+
+/* headings: tighter, branded ink, no anchor-link icons */
+h1 { font-weight: 700; letter-spacing: -0.01em; }
+[data-testid="stHeadingWithActionElements"] a { display: none; }
+
+/* sidebar: navy identity block, light text */
+[data-testid="stSidebar"] {
+  background: linear-gradient(180deg, #1e2a38 0%, #274a70 130%);
+}
+[data-testid="stSidebar"] * { color: #dfe7f0; }
+[data-testid="stSidebar"] a { color: #9ec4e8 !important; }
+[data-testid="stSidebarNav"] a span { color: #eef3f9; font-weight: 500; }
+[data-testid="stSidebarNav"] a:hover { background: rgba(255, 255, 255, 0.08); }
+[data-testid="stSidebarNav"] a[aria-current="page"] {
+  background: rgba(255, 255, 255, 0.14);
+  border-radius: 6px;
+}
+
+/* metrics as cards with an accent spine */
+[data-testid="stMetric"] {
+  background: #f7f9fb;
+  border: 1px solid #e2e6eb;
+  border-left: 3px solid #2a5a8c;
+  border-radius: 8px;
+  padding: 0.85rem 1rem;
+}
+[data-testid="stMetricLabel"] p {
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #6b7686;
+}
+[data-testid="stMetricValue"] { font-size: 1.55rem; }
+
+/* tabs: stronger selected state */
+button[data-baseweb="tab"] { font-weight: 600; }
+
+/* dataframes and bordered containers: soft card edges */
+[data-testid="stDataFrame"] { border: 1px solid #e2e6eb; border-radius: 8px; }
+[data-testid="stVerticalBlockBorderWrapper"] > div {
+  border-radius: 10px;
+}
+
+/* hero card (Forecasts page) */
+.ef-hero {
+  background: linear-gradient(135deg, #1e2a38 0%, #2a5a8c 100%);
+  color: #ffffff;
+  border-radius: 12px;
+  padding: 1.3rem 1.5rem 1.2rem;
+  margin: 0.3rem 0 1.1rem;
+}
+.ef-hero .kicker {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: #9ec4e8;
+  margin-bottom: 0.35rem;
+}
+.ef-hero .headline {
+  font-size: 1.35rem;
+  font-weight: 650;
+  line-height: 1.35;
+}
+.ef-hero .headline b { color: #ffffff; }
+.ef-hero .sub {
+  font-size: 0.82rem;
+  color: #c6d3e2;
+  margin-top: 0.5rem;
+}
+</style>
+"""
+
+
+def hero_card(kicker: str, headline_html: str, sub: str) -> None:
+    """The Forecasts page's headline block, in the shared navy identity."""
+    st.markdown(
+        f'<div class="ef-hero"><div class="kicker">{kicker}</div>'
+        f'<div class="headline">{headline_html}</div>'
+        f'<div class="sub">{sub}</div></div>',
+        unsafe_allow_html=True,
+    )
+
 
 def _api_base_url() -> str:
     """Resolve the API URL from Streamlit secrets (Cloud), then env var, then localhost."""
@@ -161,21 +249,20 @@ def history_chart(df: pd.DataFrame, y_title: str, height: int = 420) -> alt.Char
 
 
 def mae_bars(perf: pd.DataFrame, unit: str) -> alt.Chart:
-    return (
-        alt.Chart(perf)
-        .mark_bar(cornerRadiusEnd=4)
-        .encode(
-            x=alt.X("mae:Q", title=f"Realised MAE ({unit})"),
-            y=alt.Y("series:N", sort="x", title=None),
-            color=alt.Color(
-                "kind:N",
-                scale=alt.Scale(domain=["ML model", "Baseline"], range=[C_MODEL, "#898781"]),
-                legend=alt.Legend(title=None, orient="top"),
-            ),
-            tooltip=["series:N", alt.Tooltip("mae:Q", format=".2f"), "n:Q"],
-        )
-        .properties(height=180)
+    base = alt.Chart(perf).encode(
+        x=alt.X("mae:Q", title=f"Realised MAE ({unit})"),
+        y=alt.Y("series:N", sort="x", title=None, axis=alt.Axis(labelLimit=160)),
     )
+    bars = base.mark_bar(cornerRadiusEnd=4, height=20).encode(
+        color=alt.Color(
+            "kind:N",
+            scale=alt.Scale(domain=["ML model", "Baseline"], range=[C_MODEL, "#898781"]),
+            legend=alt.Legend(title=None, orient="top"),
+        ),
+        tooltip=["series:N", alt.Tooltip("mae:Q", format=".2f"), "n:Q"],
+    )
+    labels = base.mark_text(align="left", dx=5).encode(text=alt.Text("mae:Q", format=",.0f"))
+    return (bars + labels).properties(height=190)
 
 
 def footer() -> None:
