@@ -27,6 +27,11 @@ def test_invalid_target_is_rejected() -> None:
     assert client.get("/forecast/wrong").status_code == 422
 
 
+def test_ping_needs_no_database() -> None:
+    # Liveness endpoint: must work with no DB (it exists so keepalives don't wake Neon).
+    assert client.get("/ping").json() == {"status": "ok"}
+
+
 @pytest.mark.integration
 def test_health_ok(pg_session: Session) -> None:
     body = client.get("/health").json()

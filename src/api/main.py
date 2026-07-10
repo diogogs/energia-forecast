@@ -61,6 +61,17 @@ def get_session() -> Iterator[Session]:
 SessionDep = Annotated[Session, Depends(get_session)]
 
 
+@app.get("/ping")
+def ping() -> dict[str, str]:
+    """Liveness only — keeps the web service warm WITHOUT touching the database.
+
+    The every-10-minutes keepalive must hit this, not /health: /health queries Postgres, and
+    on Neon's free plan that keeps the compute awake around the clock, exhausting the monthly
+    compute allowance (100 CU-hours/project). Readiness checks stay on /health.
+    """
+    return {"status": "ok"}
+
+
 @app.get("/health", response_model=Health)
 def health(session: SessionDep) -> Health:
     latest = session.execute(select(func.max(Prediction.issue_date))).scalar_one_or_none()

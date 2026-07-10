@@ -18,7 +18,9 @@ jobs:
     steps:
       - name: Ping API (and dashboard)
         run: |
+          # /ping, NOT /health: the liveness endpoint skips the database, so Neon's compute can
+          # autosuspend between real uses (its free plan meters compute-hours).
           # --max-time 90 tolerates one cold start (the ping that pays it warms it for the rest).
-          curl -sf --max-time 90 https://energia-forecast-api.onrender.com/health
+          curl -sf --max-time 90 https://energia-forecast-api.onrender.com/ping
           # Best-effort touch of the dashboard so Streamlit Cloud sees regular traffic too.
           curl -s --max-time 60 -o /dev/null https://energia-forecast-bwwhirmyetaphmsk84dkqg.streamlit.app/ || true
