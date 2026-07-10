@@ -34,3 +34,11 @@ jobs:
 
       - name: Self-healing ingest [today-3d, today]
         run: uv run python -m src.ingestion.daily
+
+      # Monitoring, not ingestion: compares REN consumption against ENTSO-E's independent
+      # publication and records the outcome in ops.dq_log. Skips itself without the token
+      # and never fails the workflow (an ENTSO-E outage is an alert, not a pipeline failure).
+      - name: Cross-check REN vs ENTSO-E
+        env:
+          ENTSOE_API_TOKEN: ${{ secrets.ENTSOE_API_TOKEN }}
+        run: uv run python -m src.monitoring.cross_validation
