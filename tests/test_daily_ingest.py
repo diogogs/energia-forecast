@@ -51,18 +51,23 @@ def test_window_spans_days_back_and_all_sources_run(
 
         return _fn
 
-    monkeypatch.setitem(daily._SOURCES, "omie", make("omie"))
-    monkeypatch.setitem(daily._SOURCES, "ren", make("ren"))
-    monkeypatch.setitem(daily._SOURCES, "energy_charts", make("energy_charts"))
-    monkeypatch.setitem(daily._SOURCES, "openmeteo", make("openmeteo"))
+    # Patch the backfill functions (not _SOURCES): the openmeteo lambda adds +1 day to the
+    # window and that arithmetic is exactly what this test needs to observe.
+    monkeypatch.setattr(daily, "backfill_omie", make("omie"))
+    monkeypatch.setattr(daily, "backfill_ren", make("ren"))
+    monkeypatch.setattr(daily, "backfill_energy_charts", make("energy_charts"))
+    monkeypatch.setattr(daily, "backfill_openmeteo", make("openmeteo"))
 
     summary = daily.run_daily(days_back=3)
 
     assert set(summary) == {"omie", "ren", "energy_charts", "openmeteo"}
     today = dt.datetime.now(tz=dt.UTC).date()
-    for start, end in calls.values():
-        assert end == today
-        assert (end - start).days == 3
+    for name, (start, end) in calls.items():
+        # Open-Meteo reaches into tomorrow: the D+1 forecast needs weather valid on the
+        # delivery day (regression for the NaN-weather-at-emission bug, 2026-07-11).
+        expected_end = today + dt.timedelta(days=1) if name == "openmeteo" else today
+        assert end == expected_end, name
+        assert start == today - dt.timedelta(days=3)
     # One durable dq event per source, all clean runs → severity info.
     assert [e["severity"] for e in dq_events] == ["info"] * 4
 
@@ -79,10 +84,10 @@ def test_one_source_failing_does_not_stop_the_others(
     def boom(start: dt.date, end: dt.date) -> dict[str, int]:
         raise RuntimeError("source down")
 
-    monkeypatch.setitem(daily._SOURCES, "omie", boom)
-    monkeypatch.setitem(daily._SOURCES, "ren", partial)
-    monkeypatch.setitem(daily._SOURCES, "energy_charts", ok)
-    monkeypatch.setitem(daily._SOURCES, "openmeteo", ok)
+    monkeypatch.setattr(daily, "backfill_omie", boom)
+    monkeypatch.setattr(daily, "backfill_ren", partial)
+    monkeypatch.setattr(daily, "backfill_energy_charts", ok)
+    monkeypatch.setattr(daily, "backfill_openmeteo", ok)
 
     summary = daily.run_daily(days_back=1)
 

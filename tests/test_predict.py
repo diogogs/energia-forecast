@@ -110,3 +110,15 @@ def test_consumption_and_price_share_a_model_name_without_colliding(pg_session: 
         pg_session.rollback()
         pg_session.execute(delete(Prediction).where(Prediction.issue_date == issue))
         pg_session.commit()
+
+
+def test_early_emission_is_refused() -> None:
+    # Insert-only means an early emission would WIN the day with staler data (seen live
+    # 2026-07-11: a mis-timezoned external cron fired at 06:05 UTC). Before t_issue → refuse.
+    import datetime as dt
+
+    from src.models.predict import too_early
+
+    issue = dt.date(2026, 7, 11)
+    assert too_early(issue, dt.datetime(2026, 7, 11, 6, 5, tzinfo=dt.UTC))
+    assert not too_early(issue, dt.datetime(2026, 7, 11, 7, 5, tzinfo=dt.UTC))

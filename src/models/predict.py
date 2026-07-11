@@ -178,6 +178,13 @@ def emit_price_forecast(
     return summary
 
 
+def too_early(issue_date: dt.date, now: dt.datetime) -> bool:
+    """An emission before t_issue must be refused, not flagged: predictions are insert-only,
+    so an early (staler-data) emission would WIN the day and block the on-time one. Observed
+    live on 2026-07-11 when a mis-timezoned external cron fired at 06:05 UTC."""
+    return now < temporal.t_issue_for(issue_date)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Emit the D+1 forecasts (consumption + price).")
     parser.add_argument(
@@ -190,6 +197,12 @@ def main() -> None:
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+    now = dt.datetime.now(tz=dt.UTC)
+    if too_early(args.issue_date, now):
+        logger.error(
+            "refusing to emit at %s: before t_issue %s", now, temporal.t_issue_for(args.issue_date)
+        )
+        raise SystemExit(1)
     engine = make_engine()
     factory = make_session_factory(engine)
     try:

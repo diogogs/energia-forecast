@@ -27,11 +27,16 @@ from src.ingestion.ren_backfill import backfill_ren
 logger = logging.getLogger("daily_ingest")
 
 # Each source over an inclusive [start, end] window; all are token-free and idempotent.
+# Open-Meteo alone extends the window to TOMORROW: the D+1 forecast needs weather valid on
+# the delivery day, and previous_day1 for tomorrow (today's run) is already served by the
+# Previous Runs API. With end=today those rows were never ingested and every live emission
+# predicted the delivery day with NaN weather — found on 2026-07-11, a silent train/serve
+# skew the backtest could not show (past valid dates were always present there).
 _SOURCES: dict[str, Callable[[dt.date, dt.date], dict[str, int]]] = {
     "omie": lambda start, end: backfill_omie(start, end),
     "ren": lambda start, end: backfill_ren(start, end),
     "energy_charts": lambda start, end: backfill_energy_charts(start, end),
-    "openmeteo": lambda start, end: backfill_openmeteo(start, end),
+    "openmeteo": lambda start, end: backfill_openmeteo(start, end + dt.timedelta(days=1)),
 }
 
 
