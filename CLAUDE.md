@@ -141,8 +141,17 @@ dia de mercado vs benchmark do backtest (manhãs pré-fix dimmed, nunca cortadas
 qualquer dia de entrega, log de emissões + streak de pontualidade (endpoint novo
 `/emissions`); headline live do Status passou a janela 7 dias (o agregado since-launch
 lia-se como "2× pior que o backtest" quando a última semana está MELHOR que ele — 74-98 MW
-vs 166); scorecard de ontem na landing (prova antes da promessa); agregação por dia de
-mercado CET (`market_day()`) em todas as vistas diárias.
+vs 166); agregação por dia de mercado CET (`market_day()`) em todas as vistas diárias.
+
+**Dashboard v5 (2026-07-18, ADR-015) — duas zonas:** landing "Tomorrow" é produto de
+informação (KPIs: preço médio + delta vs 7d, janelas barata/cara de 3h, pico; preço
+primeiro; tinta por tercil; "likely range" em vez de P10-P90; today-so-far; zero jargão) e
+a engenharia agrupou em "About the system" (Track record/Performance/Methodology/Status).
+**Switch para preços fechados à tarde:** janela OMIE do ingest passou a D+1 (padrão
+Open-Meteo) + run de ingest às 13:15 UTC (cron-job.org primário — JOB AINDA POR CRIAR pelo
+autor; fallback GH 13:20) → a landing deteta y_true de amanhã via /history e troca
+previsão→preços oficiais com o erro da manhã declarado. Página Forecasts antiga removida
+(baselines explainer migrou para Performance).
 
 ### A seguir (retomar aqui)
 - [x] Critério W2 fechado a 07-14; streak de manhãs pontuais em curso (7 a 07-18).

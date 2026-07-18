@@ -18,14 +18,20 @@ st.set_page_config(
 )
 st.markdown(BRAND_CSS, unsafe_allow_html=True)
 
+# Two zones, deliberately (ADR-015): the landing is an information product for a reader
+# who wants tomorrow's outlook; the engineering story lives under "About the system".
 nav = st.navigation(
-    [
-        st.Page("views/forecasts.py", title="Forecasts", icon=":material/bolt:", default=True),
-        st.Page("views/track_record.py", title="Track record", icon=":material/fact_check:"),
-        st.Page("views/performance.py", title="Performance", icon=":material/monitoring:"),
-        st.Page("views/how_it_works.py", title="Methodology", icon=":material/menu_book:"),
-        st.Page("views/status.py", title="System status", icon=":material/dns:"),
-    ]
+    {
+        "Forecast": [
+            st.Page("views/tomorrow.py", title="Tomorrow", icon=":material/bolt:", default=True),
+        ],
+        "About the system": [
+            st.Page("views/track_record.py", title="Track record", icon=":material/fact_check:"),
+            st.Page("views/performance.py", title="Performance", icon=":material/monitoring:"),
+            st.Page("views/how_it_works.py", title="Methodology", icon=":material/menu_book:"),
+            st.Page("views/status.py", title="System status", icon=":material/dns:"),
+        ],
+    }
 )
 
 with st.sidebar:

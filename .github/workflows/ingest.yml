@@ -9,6 +9,11 @@ on:
     # the predict workflow's own retry attempts.
     - cron: "30 6 * * *"
     - cron: "45 7 * * *"
+    # Afternoon run (ADR-015): the day-ahead auction clears ~12:45 CET and OMIE publishes
+    # D+1 prices ~13h; this run ingests them so the dashboard switches from forecast to
+    # cleared prices the same day. Primary trigger is cron-job.org at 13:15 UTC (ADR-013 —
+    # GH schedules lag hours); this schedule is the fallback.
+    - cron: "20 13 * * *"
   workflow_dispatch: {}
 
 # Never run two ingests at once (they upsert the same rows); let the running one finish.

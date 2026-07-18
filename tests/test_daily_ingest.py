@@ -63,9 +63,10 @@ def test_window_spans_days_back_and_all_sources_run(
     assert set(summary) == {"omie", "ren", "energy_charts", "openmeteo"}
     today = dt.datetime.now(tz=dt.UTC).date()
     for name, (start, end) in calls.items():
-        # Open-Meteo reaches into tomorrow: the D+1 forecast needs weather valid on the
-        # delivery day (regression for the NaN-weather-at-emission bug, 2026-07-11).
-        expected_end = today + dt.timedelta(days=1) if name == "openmeteo" else today
+        # Open-Meteo and OMIE reach into tomorrow: weather valid on the delivery day
+        # (NaN-weather regression, 2026-07-11) and cleared D+1 prices published on day D
+        # (same-day afternoon ingest, ADR-015). REN and Energy-Charts stop at today.
+        expected_end = today + dt.timedelta(days=1) if name in ("openmeteo", "omie") else today
         assert end == expected_end, name
         assert start == today - dt.timedelta(days=3)
     # One durable dq event per source, all clean runs → severity info.

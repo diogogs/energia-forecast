@@ -202,4 +202,15 @@ if not perf.empty:
             "both baselines on the same folds."
         )
 
+with st.expander("About the baselines"):
+    st.markdown(
+        "- **Persistence**: tomorrow repeats the most recent legally usable day — demand at "
+        "the same hour 48 h earlier (the current day is still incomplete at the 07:00 UTC "
+        "issue time), price 24 h earlier (day-ahead prices are published the day before).\n"
+        "- **Weekly seasonal**: tomorrow repeats the same hour one week earlier.\n\n"
+        "These naive rules are strong benchmarks in power systems. A model is only published "
+        "if it beats both on the same folds; otherwise the dashboard would show the baseline, "
+        "labelled as such."
+    )
+
 footer()
