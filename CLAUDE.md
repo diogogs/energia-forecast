@@ -136,8 +136,17 @@ Ver `.env.example` — ENTSOE_API_TOKEN, DATABASE_URL (pooled), DATABASE_URL_DIR
 - 2026-07-12/13: emissões perfeitas (pontuais + meteo fresca) às 07:06 UTC.
 - Write-up "The model was the easy part" publicado (site + `docs/posts/`); cross-validation ENTSO-E diária no dq_log.
 
+**Dashboard v4 (2026-07-18, ADR-014):** capítulo "Track record" 100% produção — MAE por
+dia de mercado vs benchmark do backtest (manhãs pré-fix dimmed, nunca cortadas), replay de
+qualquer dia de entrega, log de emissões + streak de pontualidade (endpoint novo
+`/emissions`); headline live do Status passou a janela 7 dias (o agregado since-launch
+lia-se como "2× pior que o backtest" quando a última semana está MELHOR que ele — 74-98 MW
+vs 166); scorecard de ontem na landing (prova antes da promessa); agregação por dia de
+mercado CET (`market_day()`) em todas as vistas diárias.
+
 ### A seguir (retomar aqui)
-- [ ] **2026-07-14: 3ª manhã perfeita fecha o critério W2** (3 dias de autonomia pontual) — verificar emissão 07:06 UTC `late_issue=False`.
+- [x] Critério W2 fechado a 07-14; streak de manhãs pontuais em curso (7 a 07-18).
 - [ ] **Drift monitoring a solo pelo autor** — spec em `C:\dev\spec-drift-monitoring.md`; Claude só review no fim.
-- [ ] Backlog: dashboard P2 (arquivo de previsões, evolução do erro live, feature importance), DagsHub MLflow remoto (opcional), storage Neon 86% (alavanca ADR-009).
+- [ ] Vigiar cross-check ENTSO-E×REN (07-18: MAE 50-85 MW vs ~1.3 habitual, corr 0.99 — se persistir, investigar que série foi revista).
+- [ ] Backlog dashboard: pior-dia com contexto, weekday/weekend no MAE por hora, passagem mobile, retry no cold start, agregação semanal do Track record quando o registo crescer (ADR-014); feature importance; DagsHub MLflow remoto (opcional); storage Neon 86% (alavanca ADR-009).
 - **Contexto paralelo:** dr-watch LIVE (`C:\dev\dr-watch`), site pessoal LIVE (`C:\dev\diogogs.github.io`). Mapa: `C:\dev\CLAUDE.md`.

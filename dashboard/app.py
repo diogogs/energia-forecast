@@ -21,6 +21,7 @@ st.markdown(BRAND_CSS, unsafe_allow_html=True)
 nav = st.navigation(
     [
         st.Page("views/forecasts.py", title="Forecasts", icon=":material/bolt:", default=True),
+        st.Page("views/track_record.py", title="Track record", icon=":material/fact_check:"),
         st.Page("views/performance.py", title="Performance", icon=":material/monitoring:"),
         st.Page("views/how_it_works.py", title="Methodology", icon=":material/menu_book:"),
         st.Page("views/status.py", title="System status", icon=":material/dns:"),

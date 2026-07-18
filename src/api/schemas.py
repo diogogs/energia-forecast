@@ -53,3 +53,15 @@ class HistoryPoint(BaseModel):
     quantile: str
     y_hat: float
     y_true: float | None
+
+
+class Emission(BaseModel):
+    """One production emission: when a day's forecast was actually issued, per target.
+
+    The autonomy record — late emissions are included and flagged, never hidden."""
+
+    issue_date: dt.date
+    target_name: str
+    issued_at: dt.datetime
+    late_issue: bool
+    n_hours: int

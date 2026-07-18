@@ -16,6 +16,7 @@ from common import (
     forecast_lines,
     hero_card,
     line_chart,
+    live_scored,
     local,
     perf_frame,
     price_band,
@@ -87,6 +88,42 @@ if not cons_pts.empty and isinstance(cons, dict):
         f"Issued {when}, before the 12:00 CET day-ahead auction. Forecasts are stored "
         "with their issue timestamp and never revised.",
     )
+
+# ------------------------------------------------------- yesterday scorecard
+# Proof before promise: how the previous forecast actually did, before tomorrow's detail.
+
+
+def _yesterday_mae(target: str, model: str) -> tuple[float, int] | None:
+    scored = live_scored(api_or_none(f"/history/{target}?days=4"), model)
+    if scored.empty:
+        return None
+    # Most recent market day with a representative number of scored hours.
+    counts = scored.groupby("day")["abs_err"].agg(["mean", "size"]).sort_index()
+    full = counts[counts["size"] >= 20]
+    if full.empty:
+        return None
+    return float(full["mean"].iloc[-1]), int(full["size"].iloc[-1])
+
+
+_score_cols = st.columns([1, 1, 1])
+_y_cons = _yesterday_mae("consumption", "lightgbm")
+_y_price = _yesterday_mae("price", "lightgbm")
+if _y_cons:
+    delta = _mae_delta(cons_perf, "lightgbm")
+    rel = f"{_y_cons[0] / delta[0] - 1:+.0%} vs backtest" if delta else ""
+    _score_cols[0].metric("Yesterday — demand MAE", f"{_y_cons[0]:,.0f} MW", rel,
+                          delta_color="inverse")  # fmt: skip
+if _y_price:
+    delta = _mae_delta(price_perf, "lightgbm_p50")
+    rel = f"{_y_price[0] / delta[0] - 1:+.0%} vs backtest" if delta else ""
+    _score_cols[1].metric("Yesterday — price MAE", f"{_y_price[0]:,.1f} €/MWh", rel,
+                          delta_color="inverse")  # fmt: skip
+if _y_cons or _y_price:
+    with _score_cols[2]:
+        st.page_link(
+            "views/track_record.py", label="Full track record", icon=":material/fact_check:"
+        )
+        st.caption("Every delivery day since launch, scored.")
 
 # ---------------------------------------------------------------- today vs actual
 

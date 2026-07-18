@@ -165,6 +165,38 @@ def local(ts: pd.Series) -> pd.Series:
     return pd.to_datetime(ts, utc=True).dt.tz_convert(LISBON)
 
 
+# The delivery day is the CET/CEST market day (charter): grouping hours by UTC or Lisbon
+# date would split every market day across two dates and contaminate daily error figures.
+MARKET_TZ = "Europe/Madrid"
+
+
+def market_day(ts: pd.Series) -> pd.Series:
+    """CET/CEST calendar date of each delivery hour — the market day one emission covers."""
+    return pd.to_datetime(ts, utc=True).dt.tz_convert(MARKET_TZ).dt.normalize().dt.tz_localize(None)
+
+
+def live_scored(hist: object, model: str = "lightgbm") -> pd.DataFrame:
+    """Scored point-forecast rows of a /history payload, with market-day and abs error."""
+    df = pd.DataFrame(hist if isinstance(hist, list) else [])
+    if df.empty:
+        return df
+    df = df[(df.model_name == model) & (df["quantile"].isin(["point", "p50"]))]
+    df = df.dropna(subset=["y_true"]).copy()
+    if df.empty:
+        return df
+    df["day"] = market_day(df["target_ts"])
+    df["abs_err"] = (df.y_hat - df.y_true).abs()
+    return df
+
+
+def daily_live_mae(hist: object, model: str = "lightgbm") -> pd.DataFrame:
+    """(day, mae, hours) per market day — the production error record, one bar per delivery."""
+    df = live_scored(hist, model)
+    if df.empty:
+        return df
+    return df.groupby("day", as_index=False).agg(mae=("abs_err", "mean"), hours=("abs_err", "size"))
+
+
 def forecast_lines(points: list[dict], models: dict[str, str]) -> pd.DataFrame:
     """Long frame (hour, series, value) for the named point-forecast models."""
     rows = [p for p in points if p["model_name"] in models and p["quantile"] in ("point", "p50")]

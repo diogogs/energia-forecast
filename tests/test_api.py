@@ -88,6 +88,36 @@ def test_forecast_and_performance_surface_seeded_rows(pg_session: Session) -> No
 
 
 @pytest.mark.integration
+def test_emissions_lists_issue_with_punctuality(pg_session: Session) -> None:
+    try:
+        pg_session.add(
+            Prediction(
+                issue_date=_ISSUE,
+                target_ts=_TARGET_TS,
+                target_name="price",
+                model_name="lightgbm",
+                quantile="p50",
+                y_hat=100.0,
+                issued_at=dt.datetime(2099, 6, 10, 7, 6, tzinfo=dt.UTC),
+                late_issue=False,
+            )
+        )
+        pg_session.commit()
+
+        rows = client.get("/emissions?days=40000").json()  # sentinel lives in 2099
+        row = next(
+            r for r in rows if r["issue_date"] == "2099-06-10" and r["target_name"] == "price"
+        )
+        assert row["late_issue"] is False
+        assert row["n_hours"] == 1
+        assert row["issued_at"].startswith("2099-06-10T07:06")
+    finally:
+        pg_session.rollback()
+        pg_session.execute(delete(Prediction).where(Prediction.issue_date == _ISSUE))
+        pg_session.commit()
+
+
+@pytest.mark.integration
 def test_history_pairs_forecast_with_realised(pg_session: Session) -> None:
     # Two forecast hours; realised exists only for the first → y_true, then null (pending).
     ts_scored, ts_pending = _TARGET_TS, _TARGET_TS + dt.timedelta(hours=1)

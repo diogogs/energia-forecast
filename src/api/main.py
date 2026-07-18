@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from src.api.schemas import (
     BacktestPoint,
+    Emission,
     Forecast,
     ForecastPoint,
     Health,
@@ -146,6 +147,39 @@ def history(target_name: TargetName, session: SessionDep, days: int = 14) -> lis
             quantile=r.quantile,
             y_hat=r.y_hat,
             y_true=float(realised[r.target_ts]) if r.target_ts in realised.index else None,
+        )
+        for r in rows
+    ]
+
+
+@app.get("/emissions", response_model=list[Emission])
+def emissions(session: SessionDep, days: int = 90) -> list[Emission]:
+    """When each day's forecast was actually emitted, per target — the autonomy record.
+
+    Unlike /history (headline record, late emissions excluded), this endpoint lists every
+    emission INCLUDING late ones, flagged: the punctuality story is only honest if the
+    misses are visible next to the hits.
+    """
+    cutoff = dt.datetime.now(tz=dt.UTC).date() - dt.timedelta(days=days)
+    rows = session.execute(
+        select(
+            Prediction.issue_date,
+            Prediction.target_name,
+            func.min(Prediction.issued_at).label("issued_at"),
+            func.bool_or(Prediction.late_issue).label("late_issue"),
+            func.count(func.distinct(Prediction.target_ts)).label("n_hours"),
+        )
+        .where(Prediction.model_name.like("lightgbm%"), Prediction.issue_date >= cutoff)
+        .group_by(Prediction.issue_date, Prediction.target_name)
+        .order_by(Prediction.issue_date.desc(), Prediction.target_name)
+    ).all()
+    return [
+        Emission(
+            issue_date=r.issue_date,
+            target_name=r.target_name,
+            issued_at=r.issued_at,
+            late_issue=r.late_issue,
+            n_hours=int(r.n_hours),
         )
         for r in rows
     ]
